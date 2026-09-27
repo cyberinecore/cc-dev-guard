@@ -7,7 +7,10 @@
           {
             "type": "command",
             "command": "node",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs", "hook"],
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs",
+              "hook"
+            ],
             "timeout": 15
           }
         ]
@@ -18,8 +21,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/check-node.sh"],
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs",
+              "session-start"
+            ],
             "timeout": 10
           }
         ]

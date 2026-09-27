@@ -4,6 +4,7 @@ import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { sessionStart } from "../scripts/lib/cli.mjs";
 import { hookInput, isolatedEnv, scopeFixture, tempDir } from "./helpers.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,17 +29,13 @@ test("an engine that fails to load still answers ask, or deny under bypassPermis
   }
 });
 
-test("check-node.sh is silent with node 18+ and warns without it", { skip: process.platform === "win32" }, () => {
-  const script = join(root, "scripts", "check-node.sh");
-  const ok = spawnSync("/bin/sh", [script], { env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` }, encoding: "utf8" });
-  assert.equal(ok.stdout, "");
-  const bin = tempDir();
-  const none = spawnSync("/bin/sh", [script], { env: { PATH: bin }, encoding: "utf8" });
-  assert.match(JSON.parse(none.stdout).systemMessage, /node was not found/);
-  mkdirSync(join(bin, "old"));
-  writeFileSync(join(bin, "old", "node"), "#!/bin/sh\necho v16.20.0\n", { mode: 0o755 });
-  const old = spawnSync("/bin/sh", [script], { env: { PATH: join(bin, "old") }, encoding: "utf8" });
-  assert.match(JSON.parse(old.stdout).systemMessage, /v16\.20\.0 is older than 18/);
+test("session-start is silent on node 18+ and warns on older node", () => {
+  const r = spawnSync(process.execPath, [entry, "session-start"], { encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, "");
+  assert.equal(sessionStart("22.1.0"), null);
+  assert.equal(sessionStart("18.0.0"), null);
+  assert.match(sessionStart("16.20.2").systemMessage, /16\.20\.2 is older than 18/);
 });
 
 test("the hook stays well inside its configured timeout", () => {

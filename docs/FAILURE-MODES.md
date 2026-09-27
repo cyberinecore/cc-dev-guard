@@ -8,7 +8,7 @@ What happens when devguard itself cannot run. Measured with `tests/live/failures
 | engine module fails to load (syntax error, missing file under `scripts/lib/`) | blocked: the entry file catches the failed import and answers ask, or deny under bypassPermissions | debug log: `devguard failed to start (Unexpected token ';')`; unit test `tests/failure.test.mjs` |
 | internal exception while deciding | blocked: ask, or deny under bypassPermissions, with the error in the reason | unit tests `tests/cli.test.mjs`, `tests/output.test.mjs` |
 | unparseable hook input | blocked: ask | unit test `tests/cli.test.mjs` |
-| `node` missing from PATH | FAILS OPEN: the write runs; the hook error goes only to the debug log | debug log: `Executable not found in $PATH`. The SessionStart hook `scripts/check-node.sh` shows a notice at session start when node is missing or older than 18 |
+| `node` missing from PATH | FAILS OPEN: the write runs; the hook error goes only to the debug log | debug log: `Executable not found in $PATH`. The SessionStart hook runs `node` too, so the missing node surfaces at session start: stream-json shows `hook_response` for SessionStart with `outcome: error` and `Executable not found in $PATH: "node"`; node older than 18 prints a notice |
 | `scripts/devguard.mjs` missing | FAILS OPEN | debug log: `Cannot find module` |
 | `scripts/devguard.mjs` itself throws before any output | FAILS OPEN | debug log: hook error with the stack |
 | hook prints something that is not JSON | FAILS OPEN, silently | nothing in the debug log |

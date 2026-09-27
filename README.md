@@ -86,13 +86,13 @@ A repository can add `.claude/devguard.json`, which may only make the guard stri
 - A directory added in the same step as a write is seen from the next step (the snapshot is written after the next tool result): the first write there may ask once.
 - After `/cd`, the session repository stays the one the session started in.
 - A repository you trust can switch devguard off: Claude Code passes the `env` block of a project's `.claude/settings.json` to hook processes, so a `PATH` without node or a `NODE_OPTIONS` preload stops the hook, and a committed `permissions.additionalDirectories` widens the allowed list. That is Claude Code's workspace-trust boundary; review a repository's `.claude/` before you trust it.
-- Fail-open cases, measured in `docs/FAILURE-MODES.md`: no `node` on the `PATH`, a missing or crashing entry script, output that is not JSON, and a hook that exceeds its 15 s timeout all let the write run. A missing or too-old node is reported at session start by `scripts/check-node.sh`. An internal error while deciding asks instead of failing open.
+- Fail-open cases, measured in `docs/FAILURE-MODES.md`: no `node` on the `PATH`, a missing or crashing entry script, output that is not JSON, and a hook that exceeds its 15 s timeout all let the write run. devguard's SessionStart hook also runs `node`, so a missing node shows up at session start as a failed hook (`Executable not found in $PATH: "node"`), and a node older than 18 prints a notice. An internal error while deciding asks instead of failing open.
 - A process that can already append to your session transcript can forge an environment snapshot; file-tool writes to transcripts ask.
 - Paths are compared after resolving symlinks and case on the existing part; a case or Unicode variant of a directory that does not exist yet is treated as different (a false ask, never a false pass).
 
 ## Platforms
 
-Tested by CI on Linux, macOS and Windows with Node 18, 20 and 22, and measured live on macOS with Claude Code 2.1.283. Windows is best-effort: the unit suite passes there, but no live Windows session has been measured. The session-start node check runs `sh`; on Windows that needs Git for Windows' `usr/bin` on the PATH, and without it only that check fails, not the guard.
+Tested by CI on Linux, macOS and Windows with Node 18, 20 and 22, and measured live on macOS with Claude Code 2.1.283. Windows is best-effort: the unit suite passes there, but no live Windows session has been measured.
 
 Hooks run in Claude Code and Cowork; the claude.ai chat surface ignores hooks, so there only the two skills load.
 

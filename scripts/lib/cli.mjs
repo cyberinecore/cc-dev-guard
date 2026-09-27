@@ -41,6 +41,12 @@ function logDecision(env, input, verdict, out, now) {
   } catch {}
 }
 
+export function sessionStart(nodeVersion) {
+  const major = Number(String(nodeVersion).split(".")[0]);
+  if (major >= 18) return null;
+  return { systemMessage: `${NAME}: node ${nodeVersion} is older than 18, so the ${NAME} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
+}
+
 export function runHook({ raw, env = process.env, deps = {}, now = Date.now() }) {
   let input;
   try {
@@ -148,6 +154,11 @@ export async function main(argv, { env = process.env, stdout = process.stdout, s
         raw = readFileSync(0, "utf8");
       } catch {}
       const out = runHook({ raw, env });
+      if (out) stdout.write(JSON.stringify(out) + "\n");
+      return 0;
+    }
+    if (cmd === "session-start") {
+      const out = sessionStart(process.versions.node);
       if (out) stdout.write(JSON.stringify(out) + "\n");
       return 0;
     }

@@ -45,9 +45,8 @@ test("hooks.json runs node on a file inside the plugin, exec form, with a timeou
   assert.deepEqual(Object.keys(h), ["hooks"]);
   assert.deepEqual(Object.keys(h.hooks).sort(), ["PreToolUse", "SessionStart"]);
   const [start] = h.hooks.SessionStart[0].hooks;
-  assert.equal(start.command, "sh");
-  assert.deepEqual(start.args, ["${CLAUDE_PLUGIN_ROOT}/scripts/check-node.sh"]);
-  assert.ok(existsSync(join(root, "scripts", "check-node.sh")));
+  assert.equal(start.command, "node");
+  assert.deepEqual(start.args, ["${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs", "session-start"]);
   const entries = h.hooks.PreToolUse;
   assert.equal(entries.length, 1);
   assert.equal(entries[0].matcher, "Write|Edit|NotebookEdit");
@@ -90,7 +89,7 @@ test("tracked files follow the directory's file rules", () => {
   }
 });
 
-test(".gitattributes rewrites nothing", () => {
+test("no .gitattributes rewrites content", () => {
   for (const f of tracked.filter((t) => basename(t) === ".gitattributes")) {
     assert.ok(!/export-ignore|export-subst|filter/.test(readFileSync(join(root, f), "utf8")), f);
   }
@@ -101,7 +100,7 @@ test("skills have front matter with a single-string description", () => {
   assert.ok(skills.length >= 2, "status and help skills exist");
   for (const f of skills) {
     const text = readFileSync(join(root, f), "utf8");
-    const fm = /^---\n([\s\S]*?)\n---\n/.exec(text);
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/.exec(text);
     assert.ok(fm, `${f} has front matter`);
     const desc = /^description: (.+)$/m.exec(fm[1]);
     assert.ok(desc && desc[1].trim().length > 0 && !desc[1].trim().startsWith("-") && !desc[1].trim().startsWith("["), `${f} description is one string`);
