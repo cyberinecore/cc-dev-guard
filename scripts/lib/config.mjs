@@ -21,6 +21,26 @@ export function isConfigFile(p) {
   return typeof p === "string" && basename(p) === REPO_CONFIG_FILE && basename(dirname(p)) === ".claude";
 }
 
+export function isClaudeSettingsFile(p, configDir) {
+  if (typeof p !== "string") return false;
+  const name = basename(p);
+  if (name !== "settings.json" && name !== "settings.local.json") return false;
+  return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
+}
+
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions"];
+
+export function repoSetOptionKeys(sessionRoot) {
+  if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
+  try {
+    const env = JSON.parse(readFileSync(join(sessionRoot, ".claude", "settings.json"), "utf8"))?.env;
+    if (!env || typeof env !== "object") return [];
+    return OPTION_KEYS.filter((k) => Object.prototype.hasOwnProperty.call(env, OPTION_PREFIX + k.toUpperCase()));
+  } catch {
+    return [];
+  }
+}
+
 function option(env, key) {
   const v = env[OPTION_PREFIX + key.toUpperCase()];
   return v === undefined ? undefined : String(v);
@@ -113,6 +133,15 @@ function applyRepoFile(c, file) {
 export function loadConfig({ env = {}, sessionRoot } = {}) {
   const c = defaultConfig();
   const w = c.warnings;
+  const untrusted = repoSetOptionKeys(sessionRoot);
+  const repoEnv = {};
+  if (untrusted.length) {
+    env = { ...env };
+    for (const k of untrusted) {
+      repoEnv[k] = option(env, k);
+      delete env[OPTION_PREFIX + k.toUpperCase()];
+    }
+  }
   const mode = option(env, "mode");
   if (mode !== undefined && mode !== "") {
     if (MODES.includes(mode)) c.mode = mode;
@@ -122,10 +151,21 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.hubRepos = parseDirList(option(env, "hub_repos"), "hub_repos", w);
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
   c.logDecisions = parseBool(option(env, "log_decisions"), "log_decisions", false, w);
+  if (untrusted.length) applyRepoEnv(c, repoEnv, join(sessionRoot, ".claude", "settings.json"));
   const file = findRepoFile(sessionRoot);
   if (file) {
     c.repoFile = file;
     applyRepoFile(c, file);
   }
   return c;
+}
+
+function applyRepoEnv(c, repoEnv, file) {
+  const w = c.warnings;
+  const where = `${file} env`;
+  for (const [key, raw] of Object.entries(repoEnv)) {
+    if (key === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
+    else if (key === "allow_ignored" && raw === "false") c.allowIgnored = false;
+    else w.push(`${where} sets ${OPTION_PREFIX}${key.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
+  }
 }

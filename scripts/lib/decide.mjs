@@ -1,6 +1,6 @@
 import { isAbsolute, join, relative } from "node:path";
-import { matchAllowance } from "./allowances.mjs";
-import { defaultConfig, isConfigFile } from "./config.mjs";
+import { configDirOf, matchAllowance } from "./allowances.mjs";
+import { defaultConfig, isClaudeSettingsFile, isConfigFile } from "./config.mjs";
 import { PATH_KEYS } from "./constants.mjs";
 import { isSubmoduleOf, makeGit } from "./git.mjs";
 import { isUnder, resolveDir, resolveThroughAncestor } from "./paths.mjs";
@@ -40,6 +40,11 @@ export function decide(input, ctx = {}) {
   return last;
 }
 
+function isTranscript(resolved, configDir) {
+  const projects = join(configDir, "projects");
+  return resolved.endsWith(".jsonl") && isUnder(resolved, projects);
+}
+
 function judge(raw, { input, env, config, git, readDirs, cwd, sessionInfo }) {
   if (raw.includes("\u0000")) return { action: "cross", why: "invalid-path", target: raw.replace(/\u0000/g, "\\0") };
   let target = raw;
@@ -51,6 +56,9 @@ function judge(raw, { input, env, config, git, readDirs, cwd, sessionInfo }) {
   if (!r) return { action: "cross", why: "unresolvable", target };
 
   if (isConfigFile(r.resolved) || isConfigFile(target)) return { action: "cross", why: "config-file", target };
+  const configDir = resolveDir(configDirOf(env));
+  if (isClaudeSettingsFile(r.resolved, configDir) || isClaudeSettingsFile(target, configDir)) return { action: "cross", why: "settings-file", target };
+  if (isTranscript(r.resolved, configDir)) return { action: "cross", why: "transcript", target };
   for (const p of config.protect || []) {
     if (isUnder(r.resolved, resolveDir(p))) return { action: "cross", why: "protected", target };
   }

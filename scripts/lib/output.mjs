@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } f
 import { join } from "node:path";
 import { ALLOWED_DIRS_SHOWN, NAME, RETRY_WINDOW_MS } from "./constants.mjs";
 
-const ALWAYS_ASK = new Set(["config-file", "protected", "invalid-path", "unresolvable"]);
+const ALWAYS_ASK = new Set(["config-file", "settings-file", "transcript", "protected", "invalid-path", "unresolvable"]);
 
 function decision(permissionDecision, reason) {
   return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason: reason } };
@@ -30,6 +30,10 @@ function alwaysAskReason(v) {
   switch (v.why) {
     case "config-file":
       return `${NAME}: \`${v.target}\` is a ${NAME} configuration file, and a change there changes what this guard allows. Approve only if you asked for this change.`;
+    case "settings-file":
+      return `${NAME}: \`${v.target}\` is a Claude Code settings file, and a change there can widen what this session may write (additionalDirectories, env, hooks). Approve only if you asked for this change.`;
+    case "transcript":
+      return `${NAME}: \`${v.target}\` is a Claude Code session transcript, which ${NAME} reads to learn the session's allowed directories. Approve only if you asked for this change.`;
     case "protected":
       return `${NAME}: \`${v.target}\` is under a path this repository protects in .claude/${NAME}.json. Approve only if you meant to change it.`;
     default:
