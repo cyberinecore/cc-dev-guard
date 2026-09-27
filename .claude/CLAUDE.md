@@ -8,7 +8,7 @@ Guidance for Claude Code working in this repository.
 
 ## Commands
 
-- All tests: `npm test` (`node --test tests/*.test.mjs`; `node --test tests/` fails because Node treats the dir as a module).
+- All tests: `npm test` (runs `tests/run.mjs`, which passes every `tests/*.test.mjs` to `node --test`; Node 18 and 20 do not expand the glob themselves on Windows).
 - One test: `node --test --test-name-pattern "<name>" tests/<file>.test.mjs`
 - Validate the plugin: `claude plugin validate . --strict` and `claude plugin validate .claude-plugin/plugin.json --strict`. This file sits in `.claude/` because a root `CLAUDE.md` makes strict validation fail.
 - Explain a verdict: `node scripts/devguard.mjs explain <path> [--cwd <dir>] [--root <dir>] [--transcript <file>]`.

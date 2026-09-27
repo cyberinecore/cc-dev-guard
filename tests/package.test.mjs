@@ -43,6 +43,11 @@ test("userConfig options are well-formed", () => {
 test("hooks.json runs node on a file inside the plugin, exec form, with a timeout", () => {
   const h = readJson("hooks/hooks.json");
   assert.deepEqual(Object.keys(h), ["hooks"]);
+  assert.deepEqual(Object.keys(h.hooks).sort(), ["PreToolUse", "SessionStart"]);
+  const [start] = h.hooks.SessionStart[0].hooks;
+  assert.equal(start.command, "sh");
+  assert.deepEqual(start.args, ["${CLAUDE_PLUGIN_ROOT}/scripts/check-node.sh"]);
+  assert.ok(existsSync(join(root, "scripts", "check-node.sh")));
   const entries = h.hooks.PreToolUse;
   assert.equal(entries.length, 1);
   assert.equal(entries[0].matcher, "Write|Edit|NotebookEdit");
