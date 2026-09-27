@@ -1,13 +1,13 @@
 import { strict as assert } from "node:assert";
 import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { test } from "node:test";
 import { cliDirs, parseAddDirs, pruneSessionRecords, recordDirectoryAdded, scopeDirs, sessionDirs, settingsDirs } from "../scripts/lib/sources.mjs";
 import { isolatedEnv, tempDir } from "./helpers.mjs";
 
 test("parseAddDirs reads every form of --add-dir", () => {
   const argv = ["claude", "-p", "--add-dir", "../b/sub", "/abs/one", "--model", "haiku", "--add-dir=/abs/two", "--add-dir", "rel", "--", "--add-dir", "/after/dashdash"];
-  assert.deepEqual(parseAddDirs(argv, "/work/a"), ["/work/b/sub", "/abs/one", "/abs/two", "/work/a/rel"]);
+  assert.deepEqual(parseAddDirs(argv, resolve("/work/a")), [resolve("/work/b/sub"), "/abs/one", "/abs/two", resolve("/work/a/rel")]);
   assert.deepEqual(parseAddDirs(["claude", "--add-dir", "rel"], ""), [], "relative entries need a launch cwd");
 });
 
@@ -41,12 +41,12 @@ test("DirectoryAdded records are per session, deduplicated, and pruned after a w
 });
 
 test("cliDirs reads --add-dir from the claude process and resolves it against the launch dir", () => {
-  const env = isolatedEnv({ CLAUDE_PID: "999999999", CLAUDE_PROJECT_DIR: "/launch/a" });
+  const env = isolatedEnv({ CLAUDE_PID: "999999999", CLAUDE_PROJECT_DIR: resolve("/launch/a") });
   mkdirSync(join(env.CLAUDE_CONFIG_DIR, "sessions"), { recursive: true });
   const deps = { processArgv: (pid) => (pid === "999999999" ? { argv: ["claude", "--add-dir", "../b"], exact: true } : null) };
-  assert.deepEqual(cliDirs({ env, deps }).map((e) => e.dir), ["/launch/b"]);
-  writeFileSync(join(env.CLAUDE_CONFIG_DIR, "sessions", "999999999.json"), JSON.stringify({ cwd: "/really/started/here" }));
-  assert.deepEqual(cliDirs({ env, deps }).map((e) => e.dir), ["/really/started/b"]);
+  assert.deepEqual(cliDirs({ env, deps }).map((e) => e.dir), [resolve("/launch/b")]);
+  writeFileSync(join(env.CLAUDE_CONFIG_DIR, "sessions", "999999999.json"), JSON.stringify({ cwd: resolve("/really/started/here") }));
+  assert.deepEqual(cliDirs({ env, deps }).map((e) => e.dir), [resolve("/really/started/b")]);
   assert.deepEqual(cliDirs({ env: {}, deps }), [], "no CLAUDE_PID, no CLI dirs");
 });
 
