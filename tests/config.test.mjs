@@ -98,7 +98,7 @@ test("the repo file cannot lower the mode", () => {
   assert.ok(c.warnings.some((w) => w.includes("warn")));
 });
 
-test("a user who turned the guard off stays off", () => {
+test("a repo file may switch a user's off back on, since that tightens", () => {
   const repo = repoWithConfig({ mode: "ask" });
   const c = loadConfig({ env: { CLAUDE_PLUGIN_OPTION_MODE: "off" }, sessionRoot: repo });
   assert.equal(c.mode, "ask", "a repo may opt a user back in: raising is tightening");

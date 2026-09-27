@@ -57,9 +57,8 @@ test("deny-once denies the first write, lets a retry through inside the window, 
   assert.equal(render(cross, { mode: "deny-once", input, now: now + 60_000, markerDir }), null);
   const other = render(cross, { mode: "deny-once", input: { ...input, session_id: "s2" }, now: now + 60_000, markerDir });
   assert.equal(decisionOf(other), "deny", "markers are per session");
-  const marker = join(markerDir, readdirSync(markerDir)[0]);
   const old = new Date(now - RETRY_WINDOW_MS - 60_000);
-  utimesSync(marker, old, old);
+  for (const name of readdirSync(markerDir)) utimesSync(join(markerDir, name), old, old);
   assert.equal(decisionOf(render(cross, { mode: "deny-once", input, now, markerDir })), "deny");
 });
 

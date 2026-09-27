@@ -1,0 +1,28 @@
+---
+name: help
+description: This skill should be used when the request names devguard and asks what it does or how to use it - "/devguard:help", "devguard lam gi", "what does devguard do", "how do I configure devguard", "devguard modes", "turn devguard off". Explains the hook, the modes, the configuration surfaces and the limits, and routes to /devguard:status for a concrete path. Never fires without a devguard anchor.
+disable-model-invocation: true
+user-invocable: true
+---
+
+# devguard help
+
+Answer from this page; for a concrete path or "why was I asked", use `/devguard:status`.
+
+What it does: a PreToolUse hook on Write, Edit and NotebookEdit. When the target file is in a different git repository from the one the session started in, and not inside a directory the session was allowed, devguard asks before the write runs. Writes inside the session repository, its worktrees, allowed directories (`--add-dir`, `/add-dir`, `permissions.additionalDirectories`), paths the other repository gitignores, non-git directories, and Claude Code's own memory and plan folders pass without a prompt. A session started outside any git repository is not guarded.
+
+Modes, set with the `mode` plugin option in `/config`:
+
+| mode | on a write outside the session's scope |
+|---|---|
+| `ask` (default) | Claude Code asks you. In a headless run (`claude -p`) nobody can answer, so the write does not run and Claude is told why. |
+| `deny-once` | Denied the first time per session and repository; a retry within 10 minutes passes. The behaviour of the original Go hook. |
+| `warn` | Never blocks; shows a notice. |
+| `off` | Does nothing. |
+
+Configuration:
+
+- Plugin options (`/config`, yours only): `mode`, `extra_allowed_dirs`, `hub_repos` (repositories whose own submodules count as part of them), `allow_ignored` (default true), `log_decisions` (default false; writes verdicts to the plugin data directory, never over the network).
+- `.claude/devguard.json` in a repository can only make the guard stricter: `"mode"` (raise only, never `off`), `"allowIgnored": false`, and `"protect": ["relative/path"]` to ask before writes to those paths inside the repository. Anything that would widen scope is ignored with a warning, and devguard asks before any write to that file.
+
+Limits: writes through Bash, MCP tools, or commands you type with `!` are not seen. The allowed-directory list is read from the session transcript; when it cannot be read, devguard asks rather than guessing. A directory added in the same step as a write is seen from the next step. devguard needs `node` on the PATH; without it, or when the hook times out, writes are not checked.
