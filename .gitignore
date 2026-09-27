@@ -1,0 +1,159 @@
+# AI Coding Tools — shared core, applied to every project
+# Credentials, cross-tool conventions and the rules that govern the per-tool
+#   blocks. Always applied. The credential lines cover tools this project may
+#   not use: a stray inert line costs nothing, a committed token costs a
+#   rotation, and that asymmetry is the whole reason they sit together here.
+# Added by /nf-ignore
+
+# Agent credentials — the only files in this asset whose accidental commit
+#   cannot be undone without rotating a token. One line each, always worth it.
+.claude/.credentials.json
+.codex/auth.json
+.codex/.env
+.opencode/auth.json
+
+# Local conventions
+.local/
+
+# MCP server output — runtime artifacts, never team-shared
+#   Playwright MCP: screenshots, page snapshots (.yml), scraped page content
+.playwright-mcp/
+
+# Skill-sync CLI manifest (openskills / agent-skills-cli). Ignored by DEFAULT
+#   only because it can carry private registry URLs; it holds sync decisions and
+#   custom_overrides, NOT raw tokens. That cuts both ways: custom_overrides is
+#   what stops the next `sync` overwriting locally customized skills, so a team
+#   that actually runs the CLI together should UN-IGNORE this and commit it —
+#   it is also the only file identifying which skill dirs are generated.
+.skillsrc
+!.skillsrc.example
+
+# Local agent-tool output directory. Source unconfirmed: observed only on an
+#   Antigravity user's checkout, but Antigravity's documented artifact path is
+#   ~/.gemini/antigravity/brain/<conversation-id>/, not the project root, and no
+#   common test/build tool defaults to a bare artifacts/. Ignored because it is
+#   generated locally and has never belonged to a repo's history.
+#   Leading slash on purpose: a bare artifacts/ would also swallow a real
+#   packages/*/artifacts/ in a workspace repo.
+/artifacts/
+
+# Personal-prefix obligation — which directories carry the set, and why.
+#   A directory this asset keeps TRACKED needs the user-/private-/hidden-/
+#   personal-/me-/*.local* set, or a personal file in it gets committed. The set
+#   is emitted for .claude/, .agents/, .agent/, .codex/, .gemini/ and
+#   .commandcode/ — the six whose authored contents (rules, skills, agents, hooks, commands) were
+#   measured or vendor-documented.
+#   It is NOT emitted for .cursor/, .roo/, .kilocode/, .windsurf/, .continue/,
+#   .qwen/, .opencode/ or .antigravity/. Not because they are exempt — the same
+#   obligation applies the moment a team authors inside one — but because this
+#   asset only ignores a connection-config file in each, and none of them was
+#   investigated. Adding six globs per directory on assumption is the exact
+#   habit that put fifteen inert patterns in here in the first place. Measure
+#   first, then add.
+
+# NOT ignored, deliberately — do not "tidy up" by adding these:
+#   .claude/ .github/ .codex/rules/ .agents/rules/ .agents/plugins/
+#   CLAUDE.md AGENTS.md AGENT.md .mcp.json .github/CODEOWNERS
+#   Each holds team-shared files that must stay tracked. A whole-directory entry
+#   for any of them overrides the targeted blocks above AND kills the negations,
+#   because git never descends into an ignored directory.
+#   .mcp.json in particular is the project-scope MCP list, MEANT to be shared.
+#   Ignore it only if that repo's copy hardcodes a key inline — check with
+#     grep -nE '(sk-|Bearer |ghp_|glpat-|AIza|xox[baprs]-)' .mcp.json
+#   and if it hits, the fix is moving the secret to an ${ENV_VAR}, not ignoring
+#   the file. Same test before ignoring any *.json/*.toml config in this asset.
+
+# Claude Code — project files
+# Applied when Claude Code is detected or selected.
+# Added by /nf-ignore
+
+# Claude Code — local/personal only; team-shared stay committed
+#   Prefix user-, private-, hidden-, personal-, me- + .local suffix (any depth)
+**/.claude/**/user-*
+**/.claude/**/private-*
+**/.claude/**/hidden-*
+**/.claude/**/personal-*
+**/.claude/**/me-*
+**/.claude/**/*.local*
+CLAUDE.local.md
+#   me- = "MeOnly": personal-by-default. New project skills are named
+#   me-<proj>-<name> so they stay LOCAL unless explicitly unlocked.
+#   To share one, add a negation BELOW this line, e.g.:
+#     !.claude/skills/me-<proj>-<name>/
+#   Runtime state — CC-generated, machine-specific
+.claude/worktrees/
+.claude/scratch*/
+.claude/scheduled_tasks.lock
+.claude/evolve/
+.claude/**/*.log
+#   agent-memory/ is NOT here on purpose. Anthropic's own file reference badges
+#   `.claude/agent-memory/` as COMMITTED: "This directory holds project-scoped
+#   subagent memory, meant to be shared with your team. To keep memory out of
+#   version control use `memory: local`, which writes to
+#   .claude/agent-memory-local/". So the shared one stays tracked and only the
+#   -local variant is ignored. An earlier revision had this exactly backwards.
+.claude/agent-memory-local/
+#   plans/ is documented ONLY under ~/.claude/ (the cleanupPeriodDays table), so
+#   by this file's own rule it should live in config-home.gitignore. It is kept
+#   here because 10 of 80 measured project .claude/ folders do contain it —
+#   likely older CC behaviour — and plan files are disposable output, so hiding
+#   them costs nothing. Do not cite it as matching vendor convention.
+.claude/plans/
+#   Config-dir-only runtime state (sessions/, jobs/, todos/, teams/, statsig/,
+#   ide/, debug/, uploads/, history.jsonl, ...) is deliberately NOT here. Those
+#   live at the ROOT of the Claude Code config dir, never under a project's
+#   .claude/ — measured 0 occurrences across 80 real project .claude/ folders.
+#   They moved to config-home.gitignore, which /nf-ignore applies only when run
+#   inside the config dir itself, where the correct form is unprefixed
+#   (`sessions/`, not `.claude/sessions/`). Do NOT re-add them with a .claude/
+#   prefix: that prefix matches nothing in either place.
+
+# Common baseline — language-agnostic, safe for any stack
+# Added by /nf-ignore (fast path for projects with no detected stack)
+
+# OS junk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Editor / IDE — local, personal
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+
+# Logs & temp
+*.log
+logs/
+*.tmp
+*.pid
+*.seed
+tmp/
+temp/
+
+# Dependency dirs (common across ecosystems; harmless if unused)
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Env / secrets — block by default; whitelist examples
+.env
+.env.*
+!.env.example
+!.env.sample
+*.local
+
+# Local Claude Code overrides (per-machine, not for VCS)
+.claude/settings.local.json
+
+.envrc
