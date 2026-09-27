@@ -25,3 +25,5 @@ Headless `claude -p` runs of this plugin (`--plugin-dir .`) in throwaway git rep
 
 
 Before the bypass fix (first run, same day), an `ask` under `bypassPermissions` for a path Claude Code treats as a safety-check path (`.claude/`, `.git/`, `.vscode/`, a dotfile) was routed into the permission pipeline ("hookAskFloor" in the debug log) and the write ran. The same paths stayed blocked under `default`, `acceptEdits`, `auto` and `dontAsk`. devguard therefore answers `deny` instead of `ask` when the hook input says `permission_mode: bypassPermissions`.
+
+Two hooks answering the same write (measured the same day, `acceptEdits`): devguard answered `ask` and a second test plugin answered `deny`; the tool result was the deny and the write did not run.
