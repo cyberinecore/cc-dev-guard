@@ -43,7 +43,8 @@ test("userConfig options are well-formed", () => {
 test("hooks.json runs node on a file inside the plugin, exec form, with a timeout", () => {
   const h = readJson("hooks/hooks.json");
   assert.deepEqual(Object.keys(h), ["hooks"]);
-  assert.deepEqual(Object.keys(h.hooks).sort(), ["PreToolUse", "SessionStart"]);
+  assert.deepEqual(Object.keys(h.hooks).sort(), ["DirectoryAdded", "PreToolUse", "SessionStart"]);
+  assert.deepEqual(h.hooks.DirectoryAdded[0].hooks[0].args, ["${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs", "directory-added"]);
   const [start] = h.hooks.SessionStart[0].hooks;
   assert.equal(start.command, "node");
   assert.deepEqual(start.args, ["${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs", "session-start"]);

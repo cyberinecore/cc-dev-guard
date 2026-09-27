@@ -32,7 +32,6 @@ export function allowanceDirs({ env = {}, input = {}, config }) {
     if (typeof dir === "string" && isAbsolute(dir)) dirs.push({ kind, dir });
   };
   add("cowork-memory", env.CLAUDE_COWORK_MEMORY_PATH_OVERRIDE);
-  add("plugin-data", env.CLAUDE_PLUGIN_DATA);
   add("scratchpad", input.scratchpad_dir);
   if (typeof env.CLAUDE_JOB_DIR === "string" && isAbsolute(env.CLAUDE_JOB_DIR)) add("job-tmp", join(env.CLAUDE_JOB_DIR, "tmp"));
   for (const d of config?.extraAllowedDirs || []) add("extra_allowed_dirs", d);

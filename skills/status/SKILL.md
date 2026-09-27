@@ -22,5 +22,5 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs" status --root "<session root>"
 node "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs" explain "<path>" --root "<session root>" --cwd "<current directory>"
 ```
 
-4. Report the output as it is: session repository, allowed directories (or why they could not be read), mode, repository config file and any warnings, then the verdict line. `pass (<reason>)` means the write goes through without devguard; `cross (...)` names what devguard does in the current mode.
+4. Report the output as it is: session repository, allowed directories with where each came from, mode, repository config file and any warnings, then the verdict line. `pass (<reason>)` means the write goes through without devguard; `cross (...)` names what devguard does in the current mode.
 5. If the user wants a directory allowed, point to the fixes that stay with them: `/add-dir <dir>` for this session, `--add-dir` at launch, `permissions.additionalDirectories` in settings, or the `extra_allowed_dirs` plugin option in `/config`. Do not edit their settings or `.claude/devguard.json` yourself unless they ask; devguard asks before any write to `.claude/devguard.json`.

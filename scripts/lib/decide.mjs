@@ -4,6 +4,7 @@ import { defaultConfig, isClaudeSettingsFile, isConfigFile } from "./config.mjs"
 import { PATH_KEYS } from "./constants.mjs";
 import { isSubmoduleOf, makeGit } from "./git.mjs";
 import { isUnder, resolveDir, resolveThroughAncestor } from "./paths.mjs";
+import { scopeDirs } from "./sources.mjs";
 import { readAllowedDirs } from "./transcript.mjs";
 
 const pass = (why) => ({ action: "pass", why });
@@ -19,6 +20,7 @@ export function decide(input, ctx = {}) {
   const deps = ctx.deps || {};
   const git = deps.git || makeGit(deps.onGit);
   const readDirs = deps.readAllowedDirs || readAllowedDirs;
+  const readScope = deps.scopeDirs || scopeDirs;
   const cwd = typeof input?.cwd === "string" ? input.cwd : "";
   const sessionRoot = sessionRootOf(ctx.sessionRoot, cwd);
   const toolInput = input?.tool_input && typeof input.tool_input === "object" ? input.tool_input : {};
@@ -33,7 +35,7 @@ export function decide(input, ctx = {}) {
   for (const key of PATH_KEYS) {
     const raw = toolInput[key];
     if (typeof raw !== "string" || raw === "") continue;
-    const v = judge(raw, { input, env, config, git, readDirs, cwd, sessionInfo });
+    const v = judge(raw, { input, env, config, git, readDirs, readScope, cwd, sessionInfo, deps });
     if (v.action === "cross") return v;
     last = v;
   }
@@ -45,7 +47,16 @@ function isTranscript(resolved, configDir) {
   return resolved.endsWith(".jsonl") && isUnder(resolved, projects);
 }
 
-function judge(raw, { input, env, config, git, readDirs, cwd, sessionInfo }) {
+export function allowedDirsFor({ input, env, config, sessionRoot, readDirs = readAllowedDirs, readScope = scopeDirs, deps = {} }) {
+  if (config.readTranscript) {
+    const t = readDirs(input?.transcript_path);
+    if (t.ok) return { ...t, via: "transcript" };
+    return { ...readScope({ env, input, sessionRoot, deps }), transcriptReason: t.reason };
+  }
+  return readScope({ env, input, sessionRoot, deps });
+}
+
+function judge(raw, { input, env, config, git, readDirs, readScope, cwd, sessionInfo, deps }) {
   if (raw.includes("\u0000")) return { action: "cross", why: "invalid-path", target: raw.replace(/\u0000/g, "\\0") };
   let target = raw;
   if (!isAbsolute(target)) {
@@ -59,6 +70,7 @@ function judge(raw, { input, env, config, git, readDirs, cwd, sessionInfo }) {
   const configDir = resolveDir(configDirOf(env));
   if (isClaudeSettingsFile(r.resolved, configDir) || isClaudeSettingsFile(target, configDir)) return { action: "cross", why: "settings-file", target };
   if (isTranscript(r.resolved, configDir)) return { action: "cross", why: "transcript", target };
+  if (isAbsolute(env.CLAUDE_PLUGIN_DATA || "") && isUnder(r.resolved, resolveDir(env.CLAUDE_PLUGIN_DATA))) return { action: "cross", why: "devguard-data", target };
   for (const p of config.protect || []) {
     if (isUnder(r.resolved, resolveDir(p))) return { action: "cross", why: "protected", target };
   }
@@ -84,7 +96,7 @@ function judge(raw, { input, env, config, git, readDirs, cwd, sessionInfo }) {
 
   if (config.allowIgnored && git.isIgnored(r.dir, r.resolved)) return pass("ignored");
 
-  const allowed = readDirs(input?.transcript_path);
+  const allowed = allowedDirsFor({ input, env, config, sessionRoot: s.root, readDirs, readScope, deps });
   if (allowed.ok && allowed.dirs.some((d) => isUnder(r.resolved, d))) return pass("allowed-dir");
 
   return {

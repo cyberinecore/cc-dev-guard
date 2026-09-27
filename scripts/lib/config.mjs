@@ -11,6 +11,7 @@ export function defaultConfig() {
     hubRepos: [],
     allowIgnored: true,
     logDecisions: false,
+    readTranscript: false,
     protect: [],
     repoFile: null,
     warnings: [],
@@ -28,7 +29,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -151,6 +152,7 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.hubRepos = parseDirList(option(env, "hub_repos"), "hub_repos", w);
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
   c.logDecisions = parseBool(option(env, "log_decisions"), "log_decisions", false, w);
+  c.readTranscript = parseBool(option(env, "read_transcript"), "read_transcript", false, w);
   if (untrusted.length) applyRepoEnv(c, repoEnv, join(sessionRoot, ".claude", "settings.json"));
   const file = findRepoFile(sessionRoot);
   if (file) {

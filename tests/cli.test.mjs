@@ -38,8 +38,10 @@ test("CLAUDE_PROJECT_DIR anchors the session even after a cd", () => {
 test("an allowed dir from the transcript passes end to end", () => {
   const f = scopeFixture();
   const transcript = writeTranscript(envLine(join(f.b, "sub")));
-  const r = hook(JSON.stringify(hookInput({ cwd: f.a, target: join(f.b, "sub", "x.md"), transcript })), isolatedEnv({ CLAUDE_PROJECT_DIR: f.a }));
+  const r = hook(JSON.stringify(hookInput({ cwd: f.a, target: join(f.b, "sub", "x.md"), transcript })), isolatedEnv({ CLAUDE_PROJECT_DIR: f.a, CLAUDE_PLUGIN_OPTION_READ_TRANSCRIPT: "true" }));
   assert.equal(r.out, "");
+  const off = hook(JSON.stringify(hookInput({ cwd: f.a, target: join(f.b, "sub", "x.md"), transcript })), isolatedEnv({ CLAUDE_PROJECT_DIR: f.a }));
+  assert.equal(JSON.parse(off.out).hookSpecificOutput.permissionDecision, "ask", "without read_transcript the snapshot is not used");
 });
 
 test("mode off from userConfig prints nothing", () => {
@@ -77,7 +79,7 @@ test("log_decisions appends cross verdicts to the plugin data dir", () => {
 test("explain prints the session repo, allowed dirs, config and verdict", () => {
   const f = scopeFixture();
   const transcript = writeTranscript(envLine(join(f.b, "sub")));
-  const r = spawnSync(process.execPath, [entry, "explain", join(f.b, "x.md"), "--root", f.a, "--cwd", f.a, "--transcript", transcript], { env: { PATH: process.env.PATH, ...isolatedEnv() }, encoding: "utf8" });
+  const r = spawnSync(process.execPath, [entry, "explain", join(f.b, "x.md"), "--root", f.a, "--cwd", f.a, "--transcript", transcript], { env: { PATH: process.env.PATH, ...isolatedEnv({ CLAUDE_PLUGIN_OPTION_READ_TRANSCRIPT: "true" }) }, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr);
   for (const needle of ["session repo", f.a, "allowed dirs", join(f.b, "sub"), "mode", "ask", "verdict", "cross"]) {
     assert.ok(r.stdout.includes(needle), `explain output mentions ${needle}:\n${r.stdout}`);
@@ -96,4 +98,15 @@ test("unknown subcommands exit 2 with usage", () => {
   const r = spawnSync(process.execPath, [entry, "nope"], { encoding: "utf8" });
   assert.equal(r.status, 2);
   assert.match(r.stderr, /usage/i);
+});
+
+test("directory-added records the directory for the session, and a later write there passes", () => {
+  const f = scopeFixture();
+  const data = join(f.root, "data");
+  const env = isolatedEnv({ CLAUDE_PROJECT_DIR: f.a, CLAUDE_PLUGIN_DATA: data });
+  const add = spawnSync(process.execPath, [entry, "directory-added"], { input: JSON.stringify({ session_id: "s1", hook_event_name: "DirectoryAdded", directory: join(f.b, "sub"), source: "slash_command" }), env: { PATH: process.env.PATH, ...env }, encoding: "utf8" });
+  assert.equal(add.status, 0);
+  assert.equal(add.stdout, "");
+  assert.equal(hook(JSON.stringify(hookInput({ cwd: f.a, target: join(f.b, "sub", "x.md"), session: "s1" })), env).out, "");
+  assert.equal(JSON.parse(hook(JSON.stringify(hookInput({ cwd: f.a, target: join(f.b, "sub", "x.md"), session: "s2" })), env).out).hookSpecificOutput.permissionDecision, "ask", "another session does not inherit it");
 });

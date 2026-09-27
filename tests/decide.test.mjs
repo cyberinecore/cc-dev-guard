@@ -7,7 +7,9 @@ import { defaultConfig } from "../scripts/lib/config.mjs";
 import { decide } from "../scripts/lib/decide.mjs";
 import { envLine, git, gitCommit, gitInit, hookInput, isolatedEnv, scopeFixture, tempDir, writeTranscript } from "./helpers.mjs";
 
-function run({ cwd, root = "", target, key, transcript = "", env = isolatedEnv(), config = defaultConfig(), extra, deps }) {
+const withTranscript = () => ({ ...defaultConfig(), readTranscript: true });
+
+function run({ cwd, root = "", target, key, transcript = "", env = isolatedEnv(), config = transcript ? withTranscript() : defaultConfig(), extra, deps }) {
   return decide(hookInput({ cwd, target, key, transcript, extra }), { sessionRoot: root, env, config, deps });
 }
 
@@ -115,6 +117,15 @@ test("allowed dirs from the transcript snapshot", () => {
   wantCross("symlink escaping an allowed dir into another repo", run({ cwd: f.a, root: f.a, transcript: trOpen, target: join(open, "esc", "x.md") }));
 });
 
+test("the transcript is not read unless read_transcript is on", () => {
+  const f = scopeFixture();
+  const transcript = writeTranscript(envLine(join(f.b, "sub")));
+  let reads = 0;
+  const deps = { readAllowedDirs: () => { reads += 1; return { ok: true, dirs: [] }; } };
+  wantCross("default config ignores the snapshot", run({ cwd: f.a, root: f.a, transcript, target: join(f.b, "sub", "x.md"), config: defaultConfig(), deps }));
+  assert.equal(reads, 0);
+});
+
 test("a case variant of an existing allowed dir follows the filesystem", () => {
   const f = scopeFixture();
   const sub = join(f.b, "sub");
@@ -138,9 +149,10 @@ test("allowed dirs unavailable never grant", () => {
     ["missing transcript", join(f.root, "absent.jsonl")],
     ["transcript without snapshot", writeTranscript(`{"type":"user","message":{"content":"hi"}}`)],
   ]) {
-    const v = run({ cwd: f.a, root: f.a, transcript, target });
+    const v = run({ cwd: f.a, root: f.a, transcript, target, config: withTranscript() });
     wantCross(name, v);
-    assert.equal(v.allowed.ok, false, `${name}: allowed dirs must be reported unavailable`);
+    assert.equal(typeof v.allowed.transcriptReason, "string", `${name}: the unreadable transcript is reported`);
+    assert.deepEqual(v.allowed.dirs, [], `${name}: nothing is granted from a transcript that cannot be read`);
   }
   const v = run({ cwd: f.a, root: f.a, transcript: writeTranscript(envLine(f.b), envLine()), target });
   wantCross("removed dir no longer allows", v);
@@ -207,7 +219,9 @@ test("documented allowances pass, and only those", () => {
 
   const data = join(f.root, "pdata");
   gitInit(data);
-  wantPass("plugin data dir", c(join(data, "x.json"), {}, { ...env, CLAUDE_PLUGIN_DATA: data }));
+  const dataVerdict = c(join(data, "x.json"), {}, { ...env, CLAUDE_PLUGIN_DATA: data });
+  wantCross("devguard's own data dir", dataVerdict);
+  assert.equal(dataVerdict.why, "devguard-data");
   wantPass("scratchpad dir from hook input", c(join(f.b, "scratch", "x.md"), { scratchpad_dir: join(f.b, "scratch") }));
   wantPass("background job tmp dir", c(join(f.b, "job", "tmp", "x.md"), {}, { ...env, CLAUDE_JOB_DIR: join(f.b, "job") }));
   wantCross("background job dir outside tmp", c(join(f.b, "job", "x.md"), {}, { ...env, CLAUDE_JOB_DIR: join(f.b, "job") }));

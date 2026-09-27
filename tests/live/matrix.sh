@@ -26,7 +26,7 @@ row() {
   shift 4
   local dir="$out/$label"
   mkdir -p "$dir"
-  (cd "$cwd" && printf '%s\n' "$prompt" | env "${ENVS[@]}" claude -p --model "$model" --setting-sources project --plugin-dir "$plugin" --output-format stream-json --verbose "$@" > "$dir/stream.jsonl" 2> "$dir/stderr.txt")
+  (cd "$cwd" && printf '%s\n' "$prompt" | env "${ENVS[@]}" claude -p --model "$model" --setting-sources project,local --plugin-dir "$plugin" --output-format stream-json --verbose "$@" > "$dir/stream.jsonl" 2> "$dir/stderr.txt")
   local written=no
   [ -e "$check" ] && written=yes
   local reason
@@ -57,6 +57,12 @@ F=$(fixture); ENVS=(CLAUDE_PLUGIN_OPTION_MODE=off)
 row other-repo-off "$F/a" "${W/TARGET/$F/b/x.txt}" "$F/b/x.txt" --dangerously-skip-permissions
 F=$(fixture); ENVS=(PROBE=1)
 row add-dir-target "$F/a" "${W/TARGET/$F/b/sub/x.txt}" "$F/b/sub/x.txt" --permission-mode acceptEdits --add-dir "$F/b/sub"
+F=$(fixture); ENVS=(PROBE=1)
+row add-dir-target-bypass "$F/a" "${W/TARGET/$F/b/sub/x.txt}" "$F/b/sub/x.txt" --dangerously-skip-permissions --add-dir "$F/b/sub"
+F=$(fixture); ENVS=(PROBE=1); mkdir -p "$F/a/.claude"; printf '{"permissions":{"additionalDirectories":["%s"]}}\n' "$F/b/sub" > "$F/a/.claude/settings.local.json"
+row settings-additional-dir-bypass "$F/a" "${W/TARGET/$F/b/sub/x.txt}" "$F/b/sub/x.txt" --dangerously-skip-permissions
+F=$(fixture); ENVS=(CLAUDE_PLUGIN_OPTION_READ_TRANSCRIPT=true)
+row add-dir-via-transcript-bypass "$F/a" "${W/TARGET/$F/b/sub/x.txt}" "$F/b/sub/x.txt" --dangerously-skip-permissions --add-dir "$F/b/sub"
 F=$(fixture); ENVS=(PROBE=1)
 row gitignored-target "$F/a" "${W/TARGET/$F/b/.local/x.txt}" "$F/b/.local/x.txt" --dangerously-skip-permissions
 F=$(fixture); ENVS=(PROBE=1)

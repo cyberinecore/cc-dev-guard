@@ -4,14 +4,16 @@ import { isAbsolute, join, resolve } from "node:path";
 import { configDirOf } from "./allowances.mjs";
 import { loadConfig } from "./config.mjs";
 import { NAME, VERSION } from "./constants.mjs";
-import { decide, sessionRootOf } from "./decide.mjs";
+import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { makeGit } from "./git.mjs";
 import { render, renderError } from "./output.mjs";
-import { readAllowedDirs } from "./transcript.mjs";
+import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 
 const USAGE = `usage: ${NAME} <command>
 
   hook                      read a PreToolUse event on stdin and print a decision (used by hooks/hooks.json)
+  directory-added           record a DirectoryAdded event for this session (used by hooks/hooks.json)
+  session-start             warn when node is too old and prune old session records (used by hooks/hooks.json)
   explain <path> [options]  show the verdict for a write to <path>
   status [options]          show the session repository, allowed directories and configuration
   --version                 print the version
@@ -110,15 +112,20 @@ function describeSession(opts, env) {
   const config = loadConfig({ env, sessionRoot: root });
   const git = makeGit();
   const repo = root ? git.commonDir(root) : "";
-  const allowed = readAllowedDirs(transcript);
+  const input = { session_id: env.CLAUDE_CODE_SESSION_ID || "", cwd, transcript_path: transcript };
+  const allowed = allowedDirsFor({ input, env, config, sessionRoot: root });
+  const via = allowed.via || "transcript";
   const lines = [
     `${NAME} ${VERSION}`,
     `session root: ${root || "(none)"}`,
     `session repo: ${repo ? git.toplevel(root) : "none (not a git repository: every write passes)"}`,
     `transcript: ${transcript || "(none)"}`,
-    `allowed dirs: ${allowed.ok ? (allowed.dirs.length ? allowed.dirs.join(", ") : "none") : `unavailable (${allowed.reason})`}`,
+    `allowed dirs (via ${via}): ${allowed.ok ? (allowed.dirs.length ? allowed.dirs.join(", ") : "none") : `unavailable (${allowed.reason})`}`,
+    ...(allowed.sources || []).map((s) => `  ${s.dir} (${s.source})`),
+    ...(allowed.transcriptReason ? [`  transcript unreadable: ${allowed.transcriptReason}`] : []),
     `mode: ${config.mode}`,
     `allow ignored: ${config.allowIgnored}`,
+    `read transcript: ${config.readTranscript}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
     `repo config file: ${config.repoFile || "none"}`,
@@ -132,7 +139,7 @@ function explain(opts, env) {
   const target = opts.positional[0];
   if (!target) throw new Error("explain needs a path");
   const s = describeSession(opts, env);
-  const input = { session_id: "explain", cwd: s.cwd, transcript_path: s.transcript, tool_name: "Write", tool_input: { file_path: target } };
+  const input = { session_id: env.CLAUDE_CODE_SESSION_ID || "explain", cwd: s.cwd, transcript_path: s.transcript, tool_name: "Write", tool_input: { file_path: target } };
   const verdict = decide(input, { sessionRoot: s.root, env, config: s.config });
   const lines = [...s.lines, `target: ${target}`];
   if (verdict.action === "pass") {
@@ -157,7 +164,16 @@ export async function main(argv, { env = process.env, stdout = process.stdout, s
       if (out) stdout.write(JSON.stringify(out) + "\n");
       return 0;
     }
+    if (cmd === "directory-added") {
+      try {
+        recordDirectoryAdded(JSON.parse(readFileSync(0, "utf8")), env);
+      } catch {}
+      return 0;
+    }
     if (cmd === "session-start") {
+      try {
+        pruneSessionRecords(env);
+      } catch {}
       const out = sessionStart(process.versions.node);
       if (out) stdout.write(JSON.stringify(out) + "\n");
       return 0;

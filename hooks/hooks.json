@@ -30,6 +30,21 @@
           }
         ]
       }
+    ],
+    "DirectoryAdded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs",
+              "directory-added"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

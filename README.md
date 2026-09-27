@@ -27,12 +27,12 @@ devguard needs Node.js 18 or later on the `PATH` that Claude Code runs hooks wit
 For every Write, Edit and NotebookEdit, the hook resolves the target path (following symlinks in the part that exists) and compares the target's git repository with the session's.
 
 - The session's repository is the one Claude Code was started in (`CLAUDE_PROJECT_DIR`). A later `cd` does not move it; a `--worktree` session counts its main checkout as the same repository.
-- Passes without a word: the same repository (worktrees included), a directory that is not inside any git repository, a path the other repository ignores (`allow_ignored`, default on), an allowed directory of the session, and Claude Code's own folders (`~/.claude/projects/*/memory/`, `~/.claude/plans/`, a user-level `autoMemoryDirectory`, this plugin's data directory, the session scratchpad and a background job's `tmp/`).
+- Passes without a word: the same repository (worktrees included), a directory that is not inside any git repository, a path the other repository ignores (`allow_ignored`, default on), an allowed directory of the session, and Claude Code's own folders (`~/.claude/projects/*/memory/`, `~/.claude/plans/`, a user-level `autoMemoryDirectory`, the session scratchpad and a background job's `tmp/`).
 - Everything else is a crossing. What happens then depends on the mode.
-- Always asked about, even inside the session's repository: `.claude/devguard.json`, Claude Code settings files (`.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings.json`), session transcripts, and paths a repository protects with `protect`. Each of these can widen what the session may write.
+- Always asked about, even inside the session's repository: `.claude/devguard.json`, Claude Code settings files (`.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings.json`), session transcripts, devguard's own data directory, and paths a repository protects with `protect`. Each of these can widen what the session may write.
 - A session started outside any git repository is not guarded.
 
-The allowed directories are read from the latest environment snapshot that Claude Code writes into the session transcript; it holds every `--add-dir`, `/add-dir` and `additionalDirectories` entry and drops removed ones. devguard reads the transcript backwards in fixed chunks and stops after 256 MiB. When the snapshot cannot be found or read, devguard does not guess: it asks, and the prompt says the list could not be read.
+The allowed directories come from three places, read fresh on every crossing: `permissions.additionalDirectories` in the managed, user, project and local settings files; directories added with `/add-dir`, which devguard records through Claude Code's `DirectoryAdded` hook event for that session only; and the `--add-dir` arguments of the running `claude` process (read from `/proc` on Linux and `ps` on macOS; relative ones are resolved against the directory Claude Code was started in). devguard never opens the session transcript unless you turn on `read_transcript`: then it reads only the environment snapshot Claude Code writes there, backwards in fixed chunks and at most 256 MiB, which also reflects directories removed during the session, and falls back to the three sources when the snapshot cannot be read.
 
 ## Modes
 
@@ -58,6 +58,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts) |
 | `allow_ignored` | `true` | let writes to paths the other repository gitignores pass |
 | `log_decisions` | `false` | append each crossing (time, session id, tool, path, verdict) to `decisions.jsonl` in the plugin data directory |
+| `read_transcript` | `false` | take the allowed directories from the environment snapshot in the session transcript instead of settings, `/add-dir` and `--add-dir`; the only setting that makes devguard open the transcript |
 
 A repository can add `.claude/devguard.json`, which may only make the guard stricter:
 
@@ -83,11 +84,11 @@ A repository can add `.claude/devguard.json`, which may only make the guard stri
 ## Limits
 
 - Only the file tools are guarded. Writes made through Bash (`echo >`, `sed -i`, `cp`, `git -C`), MCP tools, or commands you type with `!` are not seen.
-- A directory added in the same step as a write is seen from the next step (the snapshot is written after the next tool result): the first write there may ask once.
+- Without `read_transcript`, a directory removed from the session during the session stays allowed until the session ends (settings edits apply at once), and `--add-dir` paths containing spaces are not recognized on macOS, where only `ps` output is available. With `read_transcript`, a directory added in the same step as a write is seen from the next step (the snapshot is written after the next tool result).
 - After `/cd`, the session repository stays the one the session started in.
 - A repository you trust can switch devguard off: Claude Code passes the `env` block of a project's `.claude/settings.json` to hook processes, so a `PATH` without node or a `NODE_OPTIONS` preload stops the hook, and a committed `permissions.additionalDirectories` widens the allowed list. That is Claude Code's workspace-trust boundary; review a repository's `.claude/` before you trust it.
 - Fail-open cases, measured in `docs/FAILURE-MODES.md`: no `node` on the `PATH`, a missing or crashing entry script, output that is not JSON, and a hook that exceeds its 15 s timeout all let the write run. devguard's SessionStart hook also runs `node`, so a missing node shows up at session start as a failed hook (`Executable not found in $PATH: "node"`), and a node older than 18 prints a notice. An internal error while deciding asks instead of failing open.
-- A process that can already append to your session transcript can forge an environment snapshot; file-tool writes to transcripts ask.
+- A process that can already write to your session transcript or to devguard's data directory can forge a grant; file-tool writes to both ask, Bash writes are not seen.
 - Paths are compared after resolving symlinks and case on the existing part; a case or Unicode variant of a directory that does not exist yet is treated as different (a false ask, never a false pass).
 
 ## Platforms
@@ -98,10 +99,11 @@ Hooks run in Claude Code and Cowork; the claude.ai chat surface ignores hooks, s
 
 ## Network and data
 
-- devguard makes no network requests and sends nothing anywhere.
-- It reads, on your machine: the hook event Claude Code passes on stdin, the tail of the current session transcript (only the latest environment snapshot is parsed; no message content is kept or printed), `~/.claude/settings.json` (only `autoMemoryDirectory`), the session repository's `.claude/settings.json` (only its `env` keys for devguard's own options), `.claude/devguard.json` files at or above the session directory, and git metadata through `git rev-parse`, `git check-ignore` and `git ls-files`. Git runs without a shell, with `GIT_*` variables removed and `core.fsmonitor` disabled.
-- It writes only inside its plugin data directory (`~/.claude/plugins/data/<id>/`): `markers/` (empty files, `deny-once` mode only, pruned after 10 minutes) and, when `log_decisions` is on, `decisions.jsonl`. Without a data directory, `deny-once` markers go to the system temp directory. Claude Code deletes the data directory when the plugin is uninstalled.
-- It stores no personal data beyond the file paths in the optional decision log, and it changes no settings.
+- devguard makes no network requests and sends nothing anywhere. See `PRIVACY.md`.
+- It does not read your conversation. With the default settings it never opens the session transcript; with `read_transcript` on it parses only the environment snapshot line (working directory and allowed directories) and keeps nothing else.
+- It reads, on your machine: the hook event Claude Code passes on stdin, `permissions.additionalDirectories` and `autoMemoryDirectory` from Claude Code settings files, the `env` keys for devguard's own options in the session repository's `.claude/settings.json`, `.claude/devguard.json` files at or above the session directory, the command line of the running `claude` process (`/proc/<pid>/cmdline` or `ps`, only for `--add-dir`) and its start directory (`~/.claude/sessions/<pid>.json`), and git metadata through `git rev-parse`, `git check-ignore` and `git ls-files`. Git runs without a shell, with `GIT_*` variables removed and `core.fsmonitor` disabled.
+- It writes only inside its plugin data directory (`~/.claude/plugins/data/<id>/`): `sessions/<session id>.json` (the directories added with `/add-dir` in that session, pruned after 7 days), `markers/` (empty files, `deny-once` mode only, pruned after 10 minutes) and, when `log_decisions` is on, `decisions.jsonl` (time, session id, tool, file path, verdict). Without a data directory, `deny-once` markers go to the system temp directory. Claude Code deletes the data directory when the plugin is uninstalled.
+- It changes no settings and stores no personal data beyond those file paths.
 
 ## Uninstall or migrate
 

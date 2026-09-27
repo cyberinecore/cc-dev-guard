@@ -26,7 +26,12 @@
       "type": "string",
       "title": "Mode",
       "description": "ask: ask before a write outside the session's scope (default). deny-once: deny the first such write per session and repository, allow a retry for 10 minutes. warn: never block, show a notice. off: do nothing.",
-      "options": ["ask", "deny-once", "warn", "off"],
+      "options": [
+        "ask",
+        "deny-once",
+        "warn",
+        "off"
+      ],
       "default": "ask"
     },
     "extra_allowed_dirs": {
@@ -53,6 +58,12 @@
       "type": "boolean",
       "title": "Log decisions",
       "description": "Append each cross-repository verdict (time, session id, tool, path, verdict) to decisions.jsonl in the plugin data directory. Nothing is sent anywhere.",
+      "default": false
+    },
+    "read_transcript": {
+      "type": "boolean",
+      "title": "Read allowed directories from the transcript",
+      "description": "Read the environment snapshot that Claude Code writes into the session transcript, which also reflects directories removed during the session. Off by default: devguard then takes allowed directories from settings, /add-dir and --add-dir, and never opens the transcript.",
       "default": false
     }
   }
