@@ -42,8 +42,8 @@ function logDecision(env, input, verdict, out, now) {
 }
 
 export function runHook({ raw, env = process.env, deps = {}, now = Date.now() }) {
+  let input;
   try {
-    let input;
     try {
       input = JSON.parse(raw);
     } catch {
@@ -58,7 +58,7 @@ export function runHook({ raw, env = process.env, deps = {}, now = Date.now() })
     if (config.logDecisions && verdict.action === "cross") logDecision(env, input, verdict, out, now);
     return out;
   } catch (e) {
-    return renderError(e);
+    return renderError(e, input);
   }
 }
 

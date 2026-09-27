@@ -82,20 +82,27 @@ function denyOnce(v, { input, now, markerDir, warnings }) {
   return decision("deny", withWarnings(denyReason(v), warnings));
 }
 
+const BYPASS_NOTE = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/ and dotfiles), so ${NAME} denies instead. To allow it, add the directory to the session with /add-dir, or let the user make the change.`;
+
+function askOrDeny(input, reason) {
+  if (input?.permission_mode === "bypassPermissions") return decision("deny", `${reason} ${BYPASS_NOTE}`);
+  return decision("ask", reason);
+}
+
 export function render(v, { mode, input, now = Date.now(), markerDir, warnings = [] } = {}) {
   if (!v || v.action !== "cross" || mode === "off") return null;
-  if (ALWAYS_ASK.has(v.why)) return decision("ask", withWarnings(alwaysAskReason(v), warnings));
+  if (ALWAYS_ASK.has(v.why)) return askOrDeny(input, withWarnings(alwaysAskReason(v), warnings));
   switch (mode) {
     case "warn":
       return { systemMessage: withWarnings(`${NAME} (warn mode): a write to \`${v.target}\` is ${scopeText(v)}. It was not blocked.`, warnings) };
     case "deny-once":
       return denyOnce(v, { input, now, markerDir, warnings });
     default:
-      return decision("ask", withWarnings(askReason(v), warnings));
+      return askOrDeny(input, withWarnings(askReason(v), warnings));
   }
 }
 
-export function renderError(error) {
+export function renderError(error, input) {
   const msg = error && error.message ? error.message : String(error);
-  return decision("ask", `${NAME} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);
+  return askOrDeny(input, `${NAME} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);
 }

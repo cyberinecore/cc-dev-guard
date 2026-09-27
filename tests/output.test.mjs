@@ -116,3 +116,15 @@ test("an internal error asks with a readable reason", () => {
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /could not check/);
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /boom/);
 });
+
+test("under bypassPermissions every ask becomes a deny, because the harness lets some asks through there", () => {
+  const bypass = { ...input, permission_mode: "bypassPermissions" };
+  for (const v of [cross, { action: "cross", why: "config-file", target: "/a/.claude/devguard.json" }, { action: "cross", why: "protected", target: "/a/infra/x" }]) {
+    const out = render(v, { mode: "ask", input: bypass, now: Date.now(), markerDir: tempDir() });
+    assert.equal(decisionOf(out), "deny", v.why);
+    assert.match(out.hookSpecificOutput.permissionDecisionReason, /bypassPermissions/);
+  }
+  assert.equal(decisionOf(renderError(new Error("boom"), bypass)), "deny");
+  assert.equal(decisionOf(render(cross, { mode: "ask", input: { ...input, permission_mode: "acceptEdits" }, now: Date.now(), markerDir: tempDir() })), "ask");
+  assert.equal(render(cross, { mode: "warn", input: bypass, now: Date.now(), markerDir: tempDir() }).hookSpecificOutput, undefined, "warn stays a notice");
+});
