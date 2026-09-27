@@ -1,6 +1,6 @@
 # Parity with the original Go hook
 
-`node tests/live/parity.mjs <nf-hooks binary>` feeds the same PreToolUse input to the Go hook (`nf-hooks cross-repo-guard`, the hook devguard ports) and to devguard, over a fixed set of 27 cases built in temp repos, and compares whether each one blocks. The Go hook answers deny, devguard answers ask; both count as block. Run 2026-09-28 on macOS, git 2.54.0, Node v22.15.1. The case set is the cap: every disagreement is classified below, none is left open.
+`node tests/live/parity.mjs <nf-hooks binary>` feeds the same PreToolUse input to the Go hook (`nf-hooks cross-repo-guard`, the hook devguard ports) and to devguard, over a fixed set of 27 cases built in temp repos, and compares whether each one blocks. The Go hook answers deny, devguard answers ask; both count as block. devguard runs with `read_transcript` on, because the Go hook takes its allowed directories from the transcript; with the default sources the allowed-dir rows pass or block the same way when the directory comes from `--add-dir`, `/add-dir` or settings (`docs/LIVE-MATRIX.md`). Run 2026-09-28 on macOS, git 2.54.0, Node v22.15.1. The case set is the cap: every disagreement is classified below, none is left open.
 
 | case | Go hook | devguard | verdict |
 |---|---|---|---|

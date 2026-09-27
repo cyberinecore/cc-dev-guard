@@ -106,7 +106,7 @@ for (const [name, cwd, projectDir, target, opt = {}] of cases) {
   const input = JSON.stringify({ session_id: `parity-${process.pid}-${n}`, cwd, transcript_path: opt.transcript ?? "", tool_name: "Write", tool_input: { [opt.key ?? "file_path"]: target } });
   const env = { PATH: process.env.PATH, HOME: homedir(), CLAUDE_PROJECT_DIR: projectDir };
   const go = spawnSync(goBin, ["cross-repo-guard"], { input, env, encoding: "utf8" });
-  const dg = spawnSync(process.execPath, [entry, "hook"], { input, env, encoding: "utf8" });
+  const dg = spawnSync(process.execPath, [entry, "hook"], { input, env: { ...env, CLAUDE_PLUGIN_OPTION_READ_TRANSCRIPT: "true" }, encoding: "utf8" });
   const g = blocks(go.stdout);
   const d = blocks(dg.stdout);
   if (g === d) same += 1;
