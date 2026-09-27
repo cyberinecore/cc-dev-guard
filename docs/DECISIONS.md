@@ -1,0 +1,27 @@
+# devguard design record
+
+The plugin is a Claude Code port of a personal cross-repo write guard: a PreToolUse hook that stops a session from writing files outside its own repository and the directories the session was allowed. Harness facts cited as `F<n>` were measured on Claude Code 2.1.283 with the probe scripts in `tests/live/`.
+
+## Name
+
+- Working name `devguard` (plugin, skill namespace `/devguard:*`, repo config `.claude/devguard.json`, env prefix `DEVGUARD_`). Repository `cyberinecore/cc-dev-guard`.
+- Collision check, 2026-09-28: npm `devguard` is taken (an MCP dev-diary server, 0.5.0). GitHub `devguard` is an OWASP-listed supply-chain security project (`l3montree-dev/devguard`, 163 stars, with `devguard-action` and a VS Code extension), so the name is likely to hit the directory's "Name matches a known brand" reviewer hold and confuses users in the same security space. Alternatives checked the same day, all with a same-named or near-named project: `repofence` (npm package taken), `scopefence` (a GitHub repo "Repo fences for coding agents"), `writefence` (a GitHub project about agent memory writes), `scopeguard` (a Rust crate with 567 stars), `lanekeeper` (unrelated small repos, npm free), `repo-scope-guard` (npm free, generic words).
+- Status: PENDING OWNER. The name is isolated to `NAME` in `scripts/lib/constants.mjs`, the manifest files, the skill folder names and the docs, so a rename is one mechanical pass.
+
+## Decisions
+
+| ID | Decision | Status |
+|---|---|---|
+| D1 | Runtime: Node >= 18, zero dependencies, plain ESM modules, exec-form hook `node ${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs hook`. Rejected: a function hook (cannot read transcript attachments), committed Go binaries (opaque blobs a directory reviewer holds). node is not bundled with the native installer (F15), so a missing node fails open; the README says so. | PENDING OWNER (recommended) |
+| D2 | Modes `ask` (default), `deny-once` (legacy behaviour of the Go hook: deny the first write per session and repo, allow a retry within 10 minutes), `warn` (never blocks, shows a notice), `off`. `ask` holds in every headless mode measured, bypassPermissions and `--allowedTools` included, and inside subagents (F9, F10); in a headless run the reason reaches the model, so the reason is written for both readers. | PENDING OWNER (recommended; measured) |
+| D3 | No approval memory in v0.1: PostToolUse carries no approval provenance. Reopened only by backlog task k8xdz. | settled |
+| D4 | Two config surfaces. `userConfig` (the user's own, read through `CLAUDE_PLUGIN_OPTION_<KEY>`) may set any option, including extra allowed dirs and hub repos. The repo file `.claude/devguard.json` found at or above the session root may only tighten: raise the mode, set `allowIgnored: false`, add `protect` paths. An attempt to widen or to set `off` is ignored with a warning. Any write to a file named `devguard.json` under a `.claude` directory asks in every mode but `off`. | settled |
+| D5 | Allowances beyond the session repo and allowed dirs, all measured (F16-F21b): the config dir's `projects/*/memory/`, `plans/`, the `autoMemoryDirectory` from the USER settings file only (a repo-controlled project setting could otherwise widen scope), `CLAUDE_COWORK_MEMORY_PATH_OVERRIDE` when set, this plugin's `CLAUDE_PLUGIN_DATA`, the hook input's `scratchpad_dir` when present, and `$CLAUDE_JOB_DIR/tmp/` for background sessions. Non-git targets and gitignored targets (`allowIgnored`, default true) are allowed; a non-git session root allows everything. The Go hook's `~/.claude/memory` hard-code is dropped; users add such paths with the `extraAllowedDirs` option. | settled |
+| D6 | Allowed dirs come only from the last environment snapshot in the transcript (F5), read backwards in bounded chunks. Absent, unreadable or unparseable means "unavailable", which never grants: the write asks, and the reason says the list could not be read. The settings-file fallback is rejected (it misses session adds and removals). | settled |
+| D7 | Matcher `Write|Edit|NotebookEdit`; MultiEdit no longer exists (F14). Bash and MCP writes are out of scope for v0.1 and the README says so. Hook paths arrive absolute on 2.1.283 (F4); relative paths are still joined to the hook input `cwd` defensively. | settled |
+| D8 | Name, see above. | PENDING OWNER |
+| D9 | Windows is best-effort for v0.1; CI runs the unit tests on Windows, which proves the code paths, not harness behaviour. | settled |
+| D10 | An internal error while deciding emits `ask` with a readable reason. A crash before output, a missing script, a missing node or a timeout fails open; the failure table lives in `docs/FAILURE-MODES.md`. | settled |
+| D11 | The submodule carve-out (a hub repo writing into its own submodules) is opt-in per hub through the user option `hubRepos`, not through a file inside the repo, because D4 forbids a repo from widening its own scope. The Go hook's overlay file `.claude/rules/user-hub-submodules.md` is not read. | settled |
+| D12 | Anchor: the session repo is the git common dir of `CLAUDE_PROJECT_DIR` (stays on the launch dir after `cd`, F1; moves into the worktree for `--worktree`, whose common dir is still the main repo's, F2), falling back to the hook input `cwd` when unset or relative. | settled |
+| D13 | Decision logging for the parity check is opt-in (`logDecisions`, default false) and writes JSON lines to `CLAUDE_PLUGIN_DATA/decisions.jsonl`: time, session id, tool, target path, verdict. Nothing is ever sent over the network. | settled |

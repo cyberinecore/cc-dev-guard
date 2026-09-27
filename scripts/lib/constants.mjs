@@ -1,0 +1,9 @@
+export const NAME = "devguard";
+export const VERSION = "0.1.0";
+export const MODES = ["off", "warn", "deny-once", "ask"];
+export const DEFAULT_MODE = "ask";
+export const RETRY_WINDOW_MS = 10 * 60 * 1000;
+export const ALLOWED_DIRS_SHOWN = 10;
+export const PATH_KEYS = ["file_path", "notebook_path"];
+export const REPO_CONFIG_FILE = `${NAME}.json`;
+export const OPTION_PREFIX = "CLAUDE_PLUGIN_OPTION_";

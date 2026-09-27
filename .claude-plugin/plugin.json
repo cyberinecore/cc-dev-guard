@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin.json",
+  "name": "devguard",
+  "displayName": "DevGuard",
+  "version": "0.1.0",
+  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given, plus status and explain skills.",
+  "author": {
+    "name": "Nia D Pham",
+    "email": "xinchao@nghia-pham.com"
+  },
+  "homepage": "https://github.com/cyberinecore/cc-dev-guard",
+  "repository": "https://github.com/cyberinecore/cc-dev-guard",
+  "license": "MIT",
+  "keywords": [
+    "safety",
+    "guard",
+    "hooks",
+    "git",
+    "repository",
+    "scope",
+    "agents",
+    "permissions"
+  ],
+  "userConfig": {
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "ask: ask before a write outside the session's scope (default). deny-once: deny the first such write per session and repository, allow a retry for 10 minutes. warn: never block, show a notice. off: do nothing.",
+      "options": ["ask", "deny-once", "warn", "off"],
+      "default": "ask"
+    },
+    "extra_allowed_dirs": {
+      "type": "string",
+      "title": "Extra allowed directories",
+      "description": "Absolute directories every session may write to without a prompt, in addition to the session repository and its allowed directories.",
+      "multiple": true,
+      "default": []
+    },
+    "hub_repos": {
+      "type": "string",
+      "title": "Hub repositories",
+      "description": "Absolute paths of repositories whose own submodules count as part of the repository, so a session there may write into them.",
+      "multiple": true,
+      "default": []
+    },
+    "allow_ignored": {
+      "type": "boolean",
+      "title": "Allow gitignored targets",
+      "description": "Let a session write to a path that the other repository ignores, such as its .local/ or build output.",
+      "default": true
+    },
+    "log_decisions": {
+      "type": "boolean",
+      "title": "Log decisions",
+      "description": "Append each cross-repository verdict (time, session id, tool, path, verdict) to decisions.jsonl in the plugin data directory. Nothing is sent anywhere.",
+      "default": false
+    }
+  }
+}
