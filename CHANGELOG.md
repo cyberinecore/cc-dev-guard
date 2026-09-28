@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.10] - 2026-09-28
+
+- `plugin.json` sets `documentationUrl`, `supportUrl` (GitHub issues) and `privacyPolicyUrl` (`PRIVACY.md`), which the directory listing reads for its links. No behaviour change.
+
 ## [0.1.9] - 2026-09-28
 
 - `scripts/lib/git.mjs` builds its `unverified:` marker by concatenation, and a test keeps template literals out of that module, since the directory scan read the literal as a command assembled at run time. `docs/DECISIONS.md` names variables in words instead of placeholder syntax. No behaviour change.
