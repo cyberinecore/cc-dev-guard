@@ -72,9 +72,9 @@ row subagent-other-repo "$F/a" "Use the Agent tool once (general-purpose) with t
 F=$(fixture); git -C "$F/a" worktree add -q -b wt "$F/a/.claude/worktrees/wt" 2>/dev/null; ENVS=(PROBE=1)
 row worktree-into-main "$F/a/.claude/worktrees/wt" "${W/TARGET/$F/a/from-wt.txt}" "$F/a/from-wt.txt" --dangerously-skip-permissions
 F=$(fixture); ENVS=(PROBE=1)
-row config-file-same-repo "$F/a" "${W/TARGET/$F/a/.claude/devguard.json}" "$F/a/.claude/devguard.json" --dangerously-skip-permissions
+row config-file-same-repo "$F/a" "${W/TARGET/$F/a/.claude/cyberine-devguard.json}" "$F/a/.claude/cyberine-devguard.json" --dangerously-skip-permissions
 F=$(fixture); ENVS=(PROBE=1)
-row config-file-acceptEdits "$F/a" "${W/TARGET/$F/a/.claude/devguard.json}" "$F/a/.claude/devguard.json" --permission-mode acceptEdits
+row config-file-acceptEdits "$F/a" "${W/TARGET/$F/a/.claude/cyberine-devguard.json}" "$F/a/.claude/cyberine-devguard.json" --permission-mode acceptEdits
 F=$(fixture); ENVS=(PROBE=1)
 row other-repo-dot-claude-bypass "$F/a" "${W/TARGET/$F/b/.claude/x.md}" "$F/b/.claude/x.md" --dangerously-skip-permissions
 F=$(fixture); ENVS=(PROBE=1)

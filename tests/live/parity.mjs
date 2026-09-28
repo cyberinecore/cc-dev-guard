@@ -86,7 +86,7 @@ const cases = [
   ["hub -> submodule, Go overlay file", overlayHub, overlayHub, join(overlayHub, "pkg", "t.md"), { expect: "Go reads the overlay rule file; devguard needs the user option hub_repos (D11)" }],
   ["submodule -> hub", join(hub, "pkg"), join(hub, "pkg"), join(hub, "r.md")],
   ["repo git cannot read", a, a, join(broken, "x.md"), { expect: "Go treats a failed git call as non-git and allows; devguard treats a .git entry as a repo" }],
-  ["devguard config file", a, a, join(a, ".claude", "devguard.json"), { expect: "devguard always asks about its own config file" }],
+  ["devguard config file", a, a, join(a, ".claude", "cyberine-devguard.json"), { expect: "devguard always asks about its own config file" }],
   ["Claude Code settings file", a, a, join(a, ".claude", "settings.local.json"), { expect: "devguard always asks about settings files (additionalDirectories self-grant)" }],
 ];
 if (hasMem) cases.push(["~/.claude/memory", a, a, join(memDir, "parity-probe.md"), { expect: "Go hard-codes ~/.claude/memory; devguard dropped it (D5) and offers extra_allowed_dirs" }]);

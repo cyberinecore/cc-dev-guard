@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repository.
 
 ## What this repo is
 
-`devguard`: a Claude Code plugin whose PreToolUse hook asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given. It is a port of a personal Go hook (`crossrepo.go`). Design record and every settled decision: `docs/DECISIONS.md`. Read it before changing behaviour.
+`cyberine-devguard` (display name Cyberine DevGuard): a Claude Code plugin whose PreToolUse hook asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given. It is a port of a personal Go hook (`crossrepo.go`). Design record and every settled decision: `docs/DECISIONS.md`. Read it before changing behaviour.
 
 ## Commands
 
@@ -27,5 +27,5 @@ Guidance for Claude Code working in this repository.
 - The hook never emits `allow`; same-repo and allowed writes emit nothing. Internal errors emit `ask`. Under bypassPermissions every ask is sent as deny (measured harness behaviour, `docs/LIVE-MATRIX.md`).
 - Every git call goes through `scripts/lib/git.mjs` (no shell, `GIT_*` stripped, fsmonitor off).
 - Never read the session transcript unless `read_transcript` is on (directory policy: no reading chat history).
-- `.claude/devguard.json` may only tighten. Never add a code path that lets a repository widen its own scope.
+- `.claude/cyberine-devguard.json` may only tighten. Never add a code path that lets a repository widen its own scope.
 - Bump `version` in `.claude-plugin/plugin.json`, `package.json` and `VERSION` in `scripts/lib/constants.mjs` together; CI checks they match.

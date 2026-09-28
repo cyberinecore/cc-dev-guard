@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
-  "name": "devguard",
-  "displayName": "DevGuard",
+  "name": "cyberine-devguard",
+  "displayName": "Cyberine DevGuard",
   "version": "0.1.0",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given, plus status and explain skills.",
   "author": {
@@ -63,7 +63,7 @@
     "read_transcript": {
       "type": "boolean",
       "title": "Read allowed directories from the transcript",
-      "description": "Read the environment snapshot that Claude Code writes into the session transcript, which also reflects directories removed during the session. Off by default: devguard then takes allowed directories from settings, /add-dir and --add-dir, and never opens the transcript.",
+      "description": "Read the environment snapshot that Claude Code writes into the session transcript, which also reflects directories removed during the session. Off by default: Cyberine DevGuard then takes allowed directories from settings, /add-dir and --add-dir, and never opens the transcript.",
       "default": false
     }
   }

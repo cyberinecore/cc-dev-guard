@@ -1,14 +1,14 @@
 # Privacy policy
 
-devguard is a Claude Code plugin that runs only on your computer. This policy covers the plugin as published at https://github.com/cyberinecore/cc-dev-guard.
+Cyberine DevGuard is a Claude Code plugin that runs only on your computer. This policy covers the plugin as published at https://github.com/cyberinecore/cc-dev-guard.
 
 ## What it collects
 
-Nothing leaves your computer. devguard makes no network requests, has no telemetry, and sends no data to its author, to Anthropic, or to anyone else.
+Nothing leaves your computer. Cyberine DevGuard makes no network requests, has no telemetry, and sends no data to its author, to Anthropic, or to anyone else.
 
 ## What it reads locally
 
-To decide whether a file write stays inside the session's repository, devguard reads, on your machine only: the tool call Claude Code hands to the hook (tool name and file path), Claude Code settings files (only `permissions.additionalDirectories`, `autoMemoryDirectory`, and the `env` keys for devguard's own options), `.claude/devguard.json` files, the `--add-dir` arguments and start directory of the running `claude` process, and git metadata of the repositories involved. It does not read your conversation: the session transcript is opened only if you turn on the `read_transcript` option, and then only its environment snapshot (working directory and allowed directories) is parsed.
+To decide whether a file write stays inside the session's repository, Cyberine DevGuard reads, on your machine only: the tool call Claude Code hands to the hook (tool name and file path), Claude Code settings files (only `permissions.additionalDirectories`, `autoMemoryDirectory`, and the `env` keys for Cyberine DevGuard's own options), `.claude/cyberine-devguard.json` files, the `--add-dir` arguments and start directory of the running `claude` process, and git metadata of the repositories involved. It does not read your conversation: the session transcript is opened only if you turn on the `read_transcript` option, and then only its environment snapshot (working directory and allowed directories) is parsed.
 
 ## What it stores locally, and for how long
 
@@ -22,7 +22,7 @@ Claude Code deletes the data directory when you uninstall the plugin (unless you
 
 ## Children
 
-devguard is a developer tool and is not directed at children under 18.
+Cyberine DevGuard is a developer tool and is not directed at children under 18.
 
 ## Contact
 

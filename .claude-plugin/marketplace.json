@@ -1,5 +1,5 @@
 {
-  "name": "devguard",
+  "name": "cyberine-devguard",
   "owner": {
     "name": "Nia D Pham",
     "email": "xinchao@nghia-pham.com"
@@ -7,7 +7,7 @@
   "description": "Session-scope guard for Claude Code: keep file writes inside the session's own repository.",
   "plugins": [
     {
-      "name": "devguard",
+      "name": "cyberine-devguard",
       "source": "./",
       "description": "PreToolUse hook that asks before Write, Edit or NotebookEdit reach another repository, plus status and explain skills."
     }

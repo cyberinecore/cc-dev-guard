@@ -87,13 +87,13 @@ test("warn mode never blocks and shows a notice", () => {
 
 test("off mode emits nothing, even for a config file", () => {
   assert.equal(render(cross, { mode: "off", input, now: Date.now(), markerDir: tempDir() }), null);
-  assert.equal(render({ action: "cross", why: "config-file", target: "/a/.claude/devguard.json" }, { mode: "off", input, now: Date.now(), markerDir: tempDir() }), null);
+  assert.equal(render({ action: "cross", why: "config-file", target: "/a/.claude/cyberine-devguard.json" }, { mode: "off", input, now: Date.now(), markerDir: tempDir() }), null);
 });
 
 test("config-file and protected verdicts ask in ask, deny-once and warn modes", () => {
   for (const why of ["config-file", "protected"]) {
     for (const mode of ["ask", "deny-once", "warn"]) {
-      const out = render({ action: "cross", why, target: "/a/.claude/devguard.json" }, { mode, input, now: Date.now(), markerDir: tempDir() });
+      const out = render({ action: "cross", why, target: "/a/.claude/cyberine-devguard.json" }, { mode, input, now: Date.now(), markerDir: tempDir() });
       assert.equal(decisionOf(out), "ask", `${why} in ${mode}`);
     }
   }
@@ -119,7 +119,7 @@ test("an internal error asks with a readable reason", () => {
 
 test("under bypassPermissions every ask becomes a deny, because the harness lets some asks through there", () => {
   const bypass = { ...input, permission_mode: "bypassPermissions" };
-  for (const v of [cross, { action: "cross", why: "config-file", target: "/a/.claude/devguard.json" }, { action: "cross", why: "protected", target: "/a/infra/x" }]) {
+  for (const v of [cross, { action: "cross", why: "config-file", target: "/a/.claude/cyberine-devguard.json" }, { action: "cross", why: "protected", target: "/a/infra/x" }]) {
     const out = render(v, { mode: "ask", input: bypass, now: Date.now(), markerDir: tempDir() });
     assert.equal(decisionOf(out), "deny", v.why);
     assert.match(out.hookSpecificOutput.permissionDecisionReason, /bypassPermissions/);

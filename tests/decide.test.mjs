@@ -179,7 +179,7 @@ test("hub submodules pass only for a hub repo the user named", () => {
   wantCross("submodule -> unrelated repo", run({ cwd: join(hub, "pkg"), target: join(src, "f.txt"), config: hubConfig }));
   const inRepoFile = { ...defaultConfig(), hubRepos: [] };
   mkdirSync(join(hub, ".claude"), { recursive: true });
-  writeFileSync(join(hub, ".claude", "devguard.json"), JSON.stringify({ hubRepos: [hub] }));
+  writeFileSync(join(hub, ".claude", "cyberine-devguard.json"), JSON.stringify({ hubRepos: [hub] }));
   wantCross("a repo file cannot opt its own hub in", run({ cwd: hub, target: sub, config: inRepoFile }));
 });
 
@@ -250,10 +250,10 @@ test("a tilde autoMemoryDirectory expands against HOME", () => {
 
 test("writes to a devguard config file cross even in the session repo", () => {
   const f = scopeFixture();
-  const v = run({ cwd: f.a, root: f.a, target: join(f.a, ".claude", "devguard.json") });
+  const v = run({ cwd: f.a, root: f.a, target: join(f.a, ".claude", "cyberine-devguard.json") });
   wantCross("repo config file", v);
   assert.equal(v.why, "config-file");
-  wantPass("a devguard.json outside a .claude dir is ordinary", run({ cwd: f.a, root: f.a, target: join(f.a, "devguard.json") }));
+  wantPass("a cyberine-devguard.json outside a .claude dir is ordinary", run({ cwd: f.a, root: f.a, target: join(f.a, "cyberine-devguard.json") }));
 });
 
 test("protected paths from the config cross inside the session repo", () => {

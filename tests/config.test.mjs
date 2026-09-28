@@ -11,7 +11,7 @@ function repoWithConfig(content) {
   gitInit(repo);
   if (content !== undefined) {
     mkdirSync(join(repo, ".claude"), { recursive: true });
-    writeFileSync(join(repo, ".claude", "devguard.json"), typeof content === "string" ? content : JSON.stringify(content));
+    writeFileSync(join(repo, ".claude", "cyberine-devguard.json"), typeof content === "string" ? content : JSON.stringify(content));
   }
   return repo;
 }
@@ -66,7 +66,7 @@ test("the repo file is found at or above the session root", () => {
   const deep = join(repo, "a", "b");
   mkdirSync(deep, { recursive: true });
   const c = loadConfig({ env: { CLAUDE_PLUGIN_OPTION_MODE: "warn" }, sessionRoot: deep });
-  assert.equal(c.repoFile, join(repo, ".claude", "devguard.json"));
+  assert.equal(c.repoFile, join(repo, ".claude", "cyberine-devguard.json"));
   assert.equal(c.mode, "ask");
 });
 
@@ -112,9 +112,9 @@ test("a malformed repo file is ignored with a warning", () => {
   }
 });
 
-test("isConfigFile matches .claude/devguard.json anywhere", () => {
-  assert.equal(isConfigFile("/r/.claude/devguard.json"), true);
-  assert.equal(isConfigFile("/home/u/.claude/devguard.json"), true);
-  assert.equal(isConfigFile("/r/devguard.json"), false);
-  assert.equal(isConfigFile("/r/.claude/devguard.json.bak"), false);
+test("isConfigFile matches .claude/cyberine-devguard.json anywhere", () => {
+  assert.equal(isConfigFile("/r/.claude/cyberine-devguard.json"), true);
+  assert.equal(isConfigFile("/home/u/.claude/cyberine-devguard.json"), true);
+  assert.equal(isConfigFile("/r/cyberine-devguard.json"), false);
+  assert.equal(isConfigFile("/r/.claude/cyberine-devguard.json.bak"), false);
 });
