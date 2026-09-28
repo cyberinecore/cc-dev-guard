@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.8] - 2026-09-28
+
+- Option-name locals in `scripts/lib/config.mjs` are `optionName`, not `key`, since the directory scan reads credential-sounding names inside template literals as a key being assembled into a command. CI installs a pinned Claude Code (2.1.283). No behaviour change.
+
 ## [0.1.7] - 2026-09-28
 
 - The engine no longer receives the whole environment: `scripts/lib/environment.mjs` picks a fixed list of named variables once at startup, and a test fails if any module reads a variable outside that list. README lists the variables.

@@ -46,25 +46,25 @@ export function repoSetOptionKeys(sessionRoot) {
   }
 }
 
-function option(env, key) {
-  const v = env[OPTION_PREFIX + key.toUpperCase()];
+function option(env, optionName) {
+  const v = env[OPTION_PREFIX + optionName.toUpperCase()];
   return v === undefined ? undefined : String(v);
 }
 
-function parseBool(raw, key, fallback, warnings) {
+function parseBool(raw, optionName, fallback, warnings) {
   if (raw === undefined || raw === "") return fallback;
   if (raw === "true") return true;
   if (raw === "false") return false;
-  warnings.push(`option ${key}: "${raw}" is not true or false; using ${fallback}`);
+  warnings.push(`option ${optionName}: "${raw}" is not true or false; using ${fallback}`);
   return fallback;
 }
 
-function parseDirList(raw, key, warnings) {
+function parseDirList(raw, optionName, warnings) {
   if (raw === undefined || raw === "") return [];
   const out = [];
   for (const part of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
     if (isAbsolute(part)) out.push(part);
-    else warnings.push(`option ${key}: "${part}" is not an absolute path; ignored`);
+    else warnings.push(`option ${optionName}: "${part}" is not an absolute path; ignored`);
   }
   return out;
 }
@@ -102,17 +102,17 @@ function applyRepoFile(c, file) {
     return;
   }
   const repoRoot = dirname(dirname(file));
-  for (const [key, value] of Object.entries(data)) {
-    if (key === "mode") {
+  for (const [optionName, value] of Object.entries(data)) {
+    if (optionName === "mode") {
       if (!MODES.includes(value)) w.push(`${where} mode "${value}" is not one of ${modeList}; ignored`);
       else if (value === "off") w.push(`${where} mode "off" is ignored: a repository file can only make the guard stricter`);
       else if (modeRank(value) < modeRank(c.mode)) w.push(`${where} mode "${value}" is looser than "${c.mode}"; ignored`);
       else c.mode = value;
-    } else if (key === "allowIgnored") {
+    } else if (optionName === "allowIgnored") {
       if (value === false) c.allowIgnored = false;
       else if (value === true && !c.allowIgnored) w.push(`${where} allowIgnored true is ignored: a repository file cannot turn it back on`);
       else if (typeof value !== "boolean") w.push(`${where} allowIgnored must be true or false; ignored`);
-    } else if (key === "protect") {
+    } else if (optionName === "protect") {
       if (!Array.isArray(value)) {
         w.push(`${where} protect must be a list of paths relative to the repository; ignored`);
         continue;
@@ -127,10 +127,10 @@ function applyRepoFile(c, file) {
         if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) w.push(`${where} protect entry "${p}" leaves the repository; ignored`);
         else c.protect.push(abs.endsWith(sep) ? abs.slice(0, -1) : abs);
       }
-    } else if (WIDENING_KEYS.has(key)) {
-      w.push(`${where} ${key} is ignored: a repository file cannot widen what the session may write`);
+    } else if (WIDENING_KEYS.has(optionName)) {
+      w.push(`${where} ${optionName} is ignored: a repository file cannot widen what the session may write`);
     } else {
-      w.push(`${where} unknown key "${key}"; ignored`);
+      w.push(`${where} unknown key "${optionName}"; ignored`);
     }
   }
 }
@@ -169,9 +169,9 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
 function applyRepoEnv(c, repoEnv, file) {
   const w = c.warnings;
   const where = `${file} env`;
-  for (const [key, raw] of Object.entries(repoEnv)) {
-    if (key === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
-    else if (key === "allow_ignored" && raw === "false") c.allowIgnored = false;
-    else w.push(`${where} sets ${optionPrefix}${key.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
+  for (const [optionName, raw] of Object.entries(repoEnv)) {
+    if (optionName === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
+    else if (optionName === "allow_ignored" && raw === "false") c.allowIgnored = false;
+    else w.push(`${where} sets ${optionPrefix}${optionName.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
   }
 }

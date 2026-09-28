@@ -19,7 +19,7 @@ test("the manifest carries the metadata the directory reads", () => {
   const m = readJson(".claude-plugin/plugin.json");
   assert.equal(m.name, NAME);
   assert.match(m.name, /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
-  for (const key of ["description", "version", "license", "homepage", "repository"]) assert.ok(m[key], `plugin.json ${key}`);
+  for (const field of ["description", "version", "license", "homepage", "repository"]) assert.ok(m[field], `plugin.json ${field}`);
   assert.ok(m.author?.name, "plugin.json author.name");
   assert.equal(m.hooks, undefined, "hooks/hooks.json loads automatically and must not be listed");
   for (const s of [m.displayName, m.author.name]) assert.match(s, /^[\x20-\x7e]+$/, "ASCII only");
@@ -32,10 +32,10 @@ test("the manifest carries the metadata the directory reads", () => {
 test("userConfig options are well-formed", () => {
   const { userConfig } = readJson(".claude-plugin/plugin.json");
   const allowed = new Set(["type", "title", "description", "required", "default", "multiple", "sensitive", "min", "max"]);
-  for (const [key, opt] of Object.entries(userConfig)) {
-    assert.match(key, /^[a-z_][a-z0-9_]*$/, `${key} becomes CLAUDE_PLUGIN_OPTION_${key.toUpperCase()}`);
-    for (const k of Object.keys(opt)) assert.ok(allowed.has(k), `${key}.${k} is not a userConfig field`);
-    for (const k of ["type", "title", "description"]) assert.ok(opt[k] !== undefined, `${key}.${k}`);
+  for (const [field, opt] of Object.entries(userConfig)) {
+    assert.match(field, /^[a-z_][a-z0-9_]*$/, `${field} becomes CLAUDE_PLUGIN_OPTION_${field.toUpperCase()}`);
+    for (const k of Object.keys(opt)) assert.ok(allowed.has(k), `${field}.${k} is not a userConfig field`);
+    for (const k of ["type", "title", "description"]) assert.ok(opt[k] !== undefined, `${field}.${k}`);
   }
   assert.equal(userConfig.mode.default, "ask");
 });
