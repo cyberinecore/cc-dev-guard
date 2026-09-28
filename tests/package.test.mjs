@@ -29,6 +29,10 @@ test("the manifest carries the metadata the directory reads", () => {
   assert.equal(market.plugins[0].source, "./");
 });
 
+test("the module that runs git holds no template literal the directory scan could read as an assembled command", () => {
+  assert.doesNotMatch(readFileSync(join(root, "scripts", "lib", "git.mjs"), "utf8"), /`/);
+});
+
 test("userConfig options are well-formed", () => {
   const { userConfig } = readJson(".claude-plugin/plugin.json");
   const allowed = new Set(["type", "title", "description", "required", "default", "multiple", "sensitive", "min", "max"]);

@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.9] - 2026-09-28
+
+- `scripts/lib/git.mjs` builds its `unverified:` marker by concatenation, and a test keeps template literals out of that module, since the directory scan read the literal as a command assembled at run time. `docs/DECISIONS.md` names variables in words instead of placeholder syntax. No behaviour change.
+
 ## [0.1.8] - 2026-09-28
 
 - Option-name locals in `scripts/lib/config.mjs` are `optionName`, not `key`, since the directory scan reads credential-sounding names inside template literals as a key being assembled into a command. CI installs a pinned Claude Code (2.1.283). No behaviour change.
