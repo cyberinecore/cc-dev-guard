@@ -20,7 +20,7 @@ claude plugin marketplace add cyberinecore/cc-dev-guard
 claude plugin install cyberine-devguard@cyberine-devguard
 ```
 
-Cyberine DevGuard needs Node.js 18 or later on the `PATH` that Claude Code runs hooks with. It has no dependencies and installs nothing.
+Cyberine DevGuard needs Claude Code 2.1.271 or later and Node.js 18 or later on the `PATH` that Claude Code runs hooks with. It has no dependencies and installs nothing. Older Claude Code lacks what the plugin relies on: exec-form hooks (2.1.139), the `DirectoryAdded` hook event (2.1.219) and option pickers in `userConfig` (2.1.271); on such a version the guard does not run.
 
 ## What happens on a write
 

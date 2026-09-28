@@ -1,4 +1,5 @@
 {
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "cyberine-devguard",
   "owner": {
     "name": "Nia D Pham",
@@ -9,7 +10,8 @@
     {
       "name": "cyberine-devguard",
       "source": "./",
-      "description": "PreToolUse hook that asks before Write, Edit or NotebookEdit reach another repository, plus status and explain skills."
+      "description": "PreToolUse hook that asks before Write, Edit or NotebookEdit reach another repository, plus status and explain skills.",
+      "category": "security"
     }
   ]
 }
