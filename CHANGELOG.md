@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.11] - 2026-09-28
+
+- `plugin.json` keeps only `privacyPolicyUrl` of the directory listing links; `documentationUrl` and `supportUrl` are dropped because Homepage and Repository already lead to the README and issues, and each unknown key is a portal warning. No behaviour change.
+
 ## [0.1.10] - 2026-09-28
 
 - `plugin.json` sets `documentationUrl`, `supportUrl` (GitHub issues) and `privacyPolicyUrl` (`PRIVACY.md`), which the directory listing reads for its links. No behaviour change.
