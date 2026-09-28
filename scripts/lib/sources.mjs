@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { configDirOf, homeOf } from "./allowances.mjs";
+import { namedEnv } from "./environment.mjs";
 import { expandHome, resolveDir } from "./paths.mjs";
 
 const SESSION_RECORD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -78,7 +79,7 @@ export function pruneSessionRecords(env, now = Date.now()) {
   }
 }
 
-export function recordDirectoryAdded(input, env = process.env) {
+export function recordDirectoryAdded(input, env = namedEnv(process.env)) {
   const p = sessionRecordPath(env, input?.session_id);
   const dir = input?.directory;
   if (!p || typeof dir !== "string" || !isAbsolute(dir)) return false;

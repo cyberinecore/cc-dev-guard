@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given, plus status and explain skills.",
   "author": {
     "name": "Nia D Pham",

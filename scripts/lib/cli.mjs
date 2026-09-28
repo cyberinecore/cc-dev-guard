@@ -8,6 +8,7 @@ import { FALLBACK_MARKER_DIR, NAME, VERSION } from "./constants.mjs";
 const pluginName = NAME;
 const version = VERSION;
 import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
+import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
 import { render, renderError } from "./output.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
@@ -52,7 +53,7 @@ export function sessionStart(nodeVersion) {
   return { systemMessage: `${pluginName}: node ${nodeVersion} is older than 18, so the ${pluginName} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
 }
 
-export function runHook({ raw, env = process.env, deps = {}, now = Date.now() }) {
+export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Date.now() }) {
   let input;
   try {
     try {
@@ -155,7 +156,7 @@ function explain(opts, env) {
   return lines.join("\n");
 }
 
-export async function main(argv, { env = process.env, stdout = process.stdout, stderr = process.stderr } = {}) {
+export async function main(argv, { env = namedEnv(process.env), stdout = process.stdout, stderr = process.stderr } = {}) {
   const [cmd, ...rest] = argv;
   try {
     if (cmd === "hook") {
