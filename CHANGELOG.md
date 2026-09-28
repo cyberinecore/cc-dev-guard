@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.2] - 2026-09-28
+
+- Adds a square plugin icon for the directory listing.
+- `.gitignore` no longer lists other tools' credential files, which the directory scan read as the plugin using them.
+
 ## [0.1.1] - 2026-09-28
 
 - Renamed to `cyberine-devguard` (display name Cyberine DevGuard); skill namespace `/cyberine-devguard:*` and repository file `.claude/cyberine-devguard.json` follow the name.
