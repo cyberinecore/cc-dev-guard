@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.5] - 2026-09-28
+
+- README opens with a banner image for the directory listing.
+
 ## [0.1.4] - 2026-09-28
 
 - The fallback marker directory name is a fixed string instead of one built at run time, which the directory scan read as a command assembled at run time.

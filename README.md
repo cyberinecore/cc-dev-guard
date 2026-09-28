@@ -1,5 +1,7 @@
 # Cyberine DevGuard
 
+![Cyberine DevGuard: the session repository inside a boundary, a write to another repository paused at the edge](assets/banner.png)
+
 A Claude Code plugin that keeps a session inside its own repository. When Claude is about to Write, Edit or NotebookEdit a file in a different git repository that the session was not given, Cyberine DevGuard stops and asks you first. Writes inside the session's repository and its worktrees, its allowed directories (`--add-dir`, `/add-dir`, `permissions.additionalDirectories`), paths the other repository gitignores, non-git directories, and Claude Code's own memory and plan folders pass without a prompt.
 
 It exists because an agent that `cd`s into a neighbouring checkout, follows a symlink, or resolves `../other-repo/file` can edit a project nobody asked it to touch, and the permission prompt does not say "this is a different repository".
