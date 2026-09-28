@@ -2,6 +2,10 @@ import { readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { DEFAULT_MODE, MODES, OPTION_PREFIX, REPO_CONFIG_FILE } from "./constants.mjs";
 
+const defaultMode = DEFAULT_MODE;
+const modeList = MODES.join(", ");
+const optionPrefix = OPTION_PREFIX;
+
 const WIDENING_KEYS = new Set(["extraAllowedDirs", "extra_allowed_dirs", "hubRepos", "hub_repos", "allowedDirs", "allowed_dirs", "additionalDirectories"]);
 
 export function defaultConfig() {
@@ -100,7 +104,7 @@ function applyRepoFile(c, file) {
   const repoRoot = dirname(dirname(file));
   for (const [key, value] of Object.entries(data)) {
     if (key === "mode") {
-      if (!MODES.includes(value)) w.push(`${where} mode "${value}" is not one of ${MODES.join(", ")}; ignored`);
+      if (!MODES.includes(value)) w.push(`${where} mode "${value}" is not one of ${modeList}; ignored`);
       else if (value === "off") w.push(`${where} mode "off" is ignored: a repository file can only make the guard stricter`);
       else if (modeRank(value) < modeRank(c.mode)) w.push(`${where} mode "${value}" is looser than "${c.mode}"; ignored`);
       else c.mode = value;
@@ -146,7 +150,7 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   const mode = option(env, "mode");
   if (mode !== undefined && mode !== "") {
     if (MODES.includes(mode)) c.mode = mode;
-    else w.push(`option mode: "${mode}" is not one of ${MODES.join(", ")}; using ${DEFAULT_MODE}`);
+    else w.push(`option mode: "${mode}" is not one of ${modeList}; using ${defaultMode}`);
   }
   c.extraAllowedDirs = parseDirList(option(env, "extra_allowed_dirs"), "extra_allowed_dirs", w);
   c.hubRepos = parseDirList(option(env, "hub_repos"), "hub_repos", w);
@@ -168,6 +172,6 @@ function applyRepoEnv(c, repoEnv, file) {
   for (const [key, raw] of Object.entries(repoEnv)) {
     if (key === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
     else if (key === "allow_ignored" && raw === "false") c.allowIgnored = false;
-    else w.push(`${where} sets ${OPTION_PREFIX}${key.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
+    else w.push(`${where} sets ${optionPrefix}${key.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
   }
 }

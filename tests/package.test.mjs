@@ -4,7 +4,7 @@ import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { FALLBACK_MARKER_DIR, NAME, VERSION } from "../scripts/lib/constants.mjs";
+import { FALLBACK_MARKER_DIR, NAME, REPO_CONFIG_FILE, VERSION } from "../scripts/lib/constants.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const readJson = (p) => JSON.parse(readFileSync(join(root, p), "utf8"));
@@ -114,6 +114,7 @@ test("no root CLAUDE.md (strict validation rejects it)", () => {
   assert.ok(!tracked.includes("CLAUDE.md"));
 });
 
-test("the fallback marker directory follows the plugin name", () => {
+test("file names derived from the plugin name stay in sync with it", () => {
   assert.equal(FALLBACK_MARKER_DIR, NAME + "-markers");
+  assert.equal(REPO_CONFIG_FILE, NAME + ".json");
 });

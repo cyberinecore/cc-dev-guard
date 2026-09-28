@@ -4,12 +4,15 @@ import { isAbsolute, join, resolve } from "node:path";
 import { configDirOf } from "./allowances.mjs";
 import { loadConfig } from "./config.mjs";
 import { FALLBACK_MARKER_DIR, NAME, VERSION } from "./constants.mjs";
+
+const pluginName = NAME;
+const version = VERSION;
 import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { makeGit } from "./git.mjs";
 import { render, renderError } from "./output.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 
-const USAGE = `usage: ${NAME} <command>
+const usage = `usage: ${pluginName} <command>
 
   hook                      read a PreToolUse event on stdin and print a decision (used by hooks/hooks.json)
   directory-added           record a DirectoryAdded event for this session (used by hooks/hooks.json)
@@ -46,7 +49,7 @@ function logDecision(env, input, verdict, out, now) {
 export function sessionStart(nodeVersion) {
   const major = Number(String(nodeVersion).split(".")[0]);
   if (major >= 18) return null;
-  return { systemMessage: `${NAME}: node ${nodeVersion} is older than 18, so the ${NAME} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
+  return { systemMessage: `${pluginName}: node ${nodeVersion} is older than 18, so the ${pluginName} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
 }
 
 export function runHook({ raw, env = process.env, deps = {}, now = Date.now() }) {
@@ -116,7 +119,7 @@ function describeSession(opts, env) {
   const allowed = allowedDirsFor({ input, env, config, sessionRoot: root });
   const via = allowed.via || "transcript";
   const lines = [
-    `${NAME} ${VERSION}`,
+    `${pluginName} ${version}`,
     `session root: ${root || "(none)"}`,
     `session repo: ${repo ? git.toplevel(root) : "none (not a git repository: every write passes)"}`,
     `transcript: ${transcript || "(none)"}`,
@@ -187,17 +190,17 @@ export async function main(argv, { env = process.env, stdout = process.stdout, s
       return 0;
     }
     if (cmd === "--version" || cmd === "version") {
-      stdout.write(`${VERSION}\n`);
+      stdout.write(`${version}\n`);
       return 0;
     }
     if (cmd === "help" || cmd === "--help" || cmd === "-h") {
-      stdout.write(USAGE + "\n");
+      stdout.write(usage + "\n");
       return 0;
     }
   } catch (e) {
-    stderr.write(`${NAME}: ${e.message}\n\n${USAGE}\n`);
+    stderr.write(`${pluginName}: ${e.message}\n\n${usage}\n`);
     return 2;
   }
-  stderr.write(`${USAGE}\n`);
+  stderr.write(`${usage}\n`);
   return 2;
 }

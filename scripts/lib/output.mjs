@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ALLOWED_DIRS_SHOWN, NAME, RETRY_WINDOW_MS } from "./constants.mjs";
+import { ALLOWED_DIRS_SHOWN, NAME, REPO_CONFIG_FILE, RETRY_WINDOW_MS } from "./constants.mjs";
+
+const pluginName = NAME;
+const repoConfigFile = REPO_CONFIG_FILE;
+const retryMinutes = RETRY_WINDOW_MS / 60000;
 
 const ALWAYS_ASK = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected", "invalid-path", "unresolvable"]);
 
@@ -30,27 +34,27 @@ function withWarnings(text, warnings) {
 function alwaysAskReason(v) {
   switch (v.why) {
     case "config-file":
-      return `${NAME}: \`${v.target}\` is a ${NAME} configuration file, and a change there changes what this guard allows. Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\` is a ${pluginName} configuration file, and a change there changes what this guard allows. Approve only if you asked for this change.`;
     case "settings-file":
-      return `${NAME}: \`${v.target}\` is a Claude Code settings file, and a change there can widen what this session may write (additionalDirectories, env, hooks). Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\` is a Claude Code settings file, and a change there can widen what this session may write (additionalDirectories, env, hooks). Approve only if you asked for this change.`;
     case "transcript":
-      return `${NAME}: \`${v.target}\` is a Claude Code session transcript, which ${NAME} reads to learn the session's allowed directories. Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\` is a Claude Code session transcript, which ${pluginName} reads to learn the session's allowed directories. Approve only if you asked for this change.`;
     case "devguard-data":
-      return `${NAME}: \`${v.target}\` is inside ${NAME}'s own data directory, which records the directories this session added. Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\` is inside ${pluginName}'s own data directory, which records the directories this session added. Approve only if you asked for this change.`;
     case "protected":
-      return `${NAME}: \`${v.target}\` is under a path this repository protects in .claude/${NAME}.json. Approve only if you meant to change it.`;
+      return `${pluginName}: \`${v.target}\` is under a path this repository protects in .claude/${repoConfigFile}. Approve only if you meant to change it.`;
     default:
-      return `${NAME}: could not resolve the path \`${v.target}\`, so it could not check whether this write stays inside the session's scope. Approve only if you expected this write.`;
+      return `${pluginName}: could not resolve the path \`${v.target}\`, so it could not check whether this write stays inside the session's scope. Approve only if you expected this write.`;
   }
 }
 
 export function askReason(v) {
   const where = v.targetTop ? ` (\`${v.targetTop}\`)` : "";
-  return `${NAME}: \`${v.target}\` is in another repository${where}, ${scopeText(v)}. Approve only if you want this session to write there. If nobody can answer this prompt, report the write to the user instead of retrying it another way.`;
+  return `${pluginName}: \`${v.target}\` is in another repository${where}, ${scopeText(v)}. Approve only if you want this session to write there. If nobody can answer this prompt, report the write to the user instead of retrying it another way.`;
 }
 
 export function denyReason(v) {
-  return `Default: NO. \`${v.target}\` is ${scopeText(v)}. Retry only if the user explicitly names that target this turn; otherwise report instead. (${NAME} deny-once: a retry within ${RETRY_WINDOW_MS / 60000} minutes passes.)`;
+  return `Default: NO. \`${v.target}\` is ${scopeText(v)}. Retry only if the user explicitly names that target this turn; otherwise report instead. (${pluginName} deny-once: a retry within ${retryMinutes} minutes passes.)`;
 }
 
 function markerName(input, v) {
@@ -89,10 +93,10 @@ function denyOnce(v, { input, now, markerDir, warnings }) {
   return decision("deny", withWarnings(denyReason(v), warnings));
 }
 
-const BYPASS_NOTE = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/ and dotfiles), so ${NAME} denies instead. To allow it, add the directory to the session with /add-dir, or let the user make the change.`;
+const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/ and dotfiles), so ${pluginName} denies instead. To allow it, add the directory to the session with /add-dir, or let the user make the change.`;
 
 function askOrDeny(input, reason) {
-  if (input?.permission_mode === "bypassPermissions") return decision("deny", `${reason} ${BYPASS_NOTE}`);
+  if (input?.permission_mode === "bypassPermissions") return decision("deny", `${reason} ${bypassNote}`);
   return decision("ask", reason);
 }
 
@@ -101,7 +105,7 @@ export function render(v, { mode, input, now = Date.now(), markerDir, warnings =
   if (ALWAYS_ASK.has(v.why)) return askOrDeny(input, withWarnings(alwaysAskReason(v), warnings));
   switch (mode) {
     case "warn":
-      return { systemMessage: withWarnings(`${NAME} (warn mode): a write to \`${v.target}\` is ${scopeText(v)}. It was not blocked.`, warnings) };
+      return { systemMessage: withWarnings(`${pluginName} (warn mode): a write to \`${v.target}\` is ${scopeText(v)}. It was not blocked.`, warnings) };
     case "deny-once":
       return denyOnce(v, { input, now, markerDir, warnings });
     default:
@@ -111,5 +115,5 @@ export function render(v, { mode, input, now = Date.now(), markerDir, warnings =
 
 export function renderError(error, input) {
   const msg = error && error.message ? error.message : String(error);
-  return askOrDeny(input, `${NAME} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);
+  return askOrDeny(input, `${pluginName} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);
 }

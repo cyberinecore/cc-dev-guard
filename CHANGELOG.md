@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.6] - 2026-09-28
+
+- Messages and file names no longer interpolate upper-case constants, which the directory scan reads as `${ENV_VAR}` references assembled into a command; `REPO_CONFIG_FILE` is a fixed string kept in sync with the plugin name by a test. No behaviour change.
+
 ## [0.1.5] - 2026-09-28
 
 - README opens with a banner image for the directory listing.
