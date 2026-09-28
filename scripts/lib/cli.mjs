@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { configDirOf } from "./allowances.mjs";
 import { loadConfig } from "./config.mjs";
-import { NAME, VERSION } from "./constants.mjs";
+import { FALLBACK_MARKER_DIR, NAME, VERSION } from "./constants.mjs";
 import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { makeGit } from "./git.mjs";
 import { render, renderError } from "./output.mjs";
@@ -25,7 +25,7 @@ options:
                       (default: the transcript of $CLAUDE_CODE_SESSION_ID, when set)`;
 
 function markerDirFor(env) {
-  return isAbsolute(env.CLAUDE_PLUGIN_DATA || "") ? join(env.CLAUDE_PLUGIN_DATA, "markers") : join(tmpdir(), `${NAME}-markers`);
+  return isAbsolute(env.CLAUDE_PLUGIN_DATA || "") ? join(env.CLAUDE_PLUGIN_DATA, "markers") : join(tmpdir(), FALLBACK_MARKER_DIR);
 }
 
 function verdictWord(out) {

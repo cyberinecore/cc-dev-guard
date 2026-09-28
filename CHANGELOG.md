@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.4] - 2026-09-28
+
+- The fallback marker directory name is a fixed string instead of one built at run time, which the directory scan read as a command assembled at run time.
+
 ## [0.1.3] - 2026-09-28
 
 - The `mode` option is a plain string without a picker, because the directory does not accept `options` in `userConfig` yet; an unknown value still falls back to `ask` with a warning.
