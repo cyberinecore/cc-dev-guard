@@ -31,7 +31,7 @@ test("the manifest carries the metadata the directory reads", () => {
 
 test("userConfig options are well-formed", () => {
   const { userConfig } = readJson(".claude-plugin/plugin.json");
-  const allowed = new Set(["type", "title", "description", "required", "default", "options", "multiple", "sensitive", "min", "max"]);
+  const allowed = new Set(["type", "title", "description", "required", "default", "multiple", "sensitive", "min", "max"]);
   for (const [key, opt] of Object.entries(userConfig)) {
     assert.match(key, /^[a-z_][a-z0-9_]*$/, `${key} becomes CLAUDE_PLUGIN_OPTION_${key.toUpperCase()}`);
     for (const k of Object.keys(opt)) assert.ok(allowed.has(k), `${key}.${k} is not a userConfig field`);

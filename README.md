@@ -20,13 +20,14 @@ claude plugin marketplace add cyberinecore/cc-dev-guard
 claude plugin install cyberine-devguard@cyberine-devguard
 ```
 
-Cyberine DevGuard needs Claude Code 2.1.271 or later and Node.js 18 or later on the `PATH` that Claude Code runs hooks with. It has no dependencies and installs nothing. Older Claude Code lacks what the plugin relies on: exec-form hooks (2.1.139), the `DirectoryAdded` hook event (2.1.219) and option pickers in `userConfig` (2.1.271); on such a version the guard does not run.
+Cyberine DevGuard needs Claude Code 2.1.219 or later and Node.js 18 or later on the `PATH` that Claude Code runs hooks with. It has no dependencies and installs nothing. Older Claude Code lacks what the plugin relies on: exec-form hooks (2.1.139) and the `DirectoryAdded` hook event (2.1.219); on such a version the guard does not run.
 
 ## What happens on a write
 
 For every Write, Edit and NotebookEdit, the hook resolves the target path (following symlinks in the part that exists) and compares the target's git repository with the session's.
 
 - The session's repository is the one Claude Code was started in (`CLAUDE_PROJECT_DIR`). A later `cd` does not move it; a `--worktree` session counts its main checkout as the same repository.
+- The hook never answers `allow` and never approves a tool call: it either stays silent, so Claude Code's normal permission rules decide, or it answers `ask` (`deny` under `bypassPermissions` and in `deny-once` mode).
 - Passes without a word: the same repository (worktrees included), a directory that is not inside any git repository, a path the other repository ignores (`allow_ignored`, default on), an allowed directory of the session, and Claude Code's own folders (`~/.claude/projects/*/memory/`, `~/.claude/plans/`, a user-level `autoMemoryDirectory`, the session scratchpad and a background job's `tmp/`).
 - Everything else is a crossing. What happens then depends on the mode.
 - Always asked about, even inside the session's repository: `.claude/cyberine-devguard.json`, Claude Code settings files (`.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings.json`), session transcripts, Cyberine DevGuard's own data directory, and paths a repository protects with `protect`. Each of these can widen what the session may write.
