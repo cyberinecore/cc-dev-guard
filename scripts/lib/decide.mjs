@@ -83,7 +83,7 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
   if (!targetRepo) return pass("non-git-target");
   if (targetRepo === s.repo) return pass("same-repo");
 
-  const allowance = matchAllowance(r.resolved, { env, input, config });
+  const allowance = matchAllowance(r.resolved, { env, input, config, sessionRoot: s.root, git });
   if (allowance) return pass(`allowance:${allowance}`);
 
   const sessionTop = git.toplevel(s.root);

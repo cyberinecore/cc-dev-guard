@@ -12,9 +12,9 @@ export function configDirOf(env) {
   return isAbsolute(explicit || "") ? explicit : join(homeOf(env), ".claude");
 }
 
-function userAutoMemoryDir(configDir, home) {
+function autoMemoryDirIn(settingsPath, home) {
   try {
-    const settings = JSON.parse(readFileSync(join(configDir, "settings.json"), "utf8"));
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     const dir = expandHome(settings?.autoMemoryDirectory, home);
     return isAbsolute(dir) ? dir : "";
   } catch {
@@ -22,12 +22,21 @@ function userAutoMemoryDir(configDir, home) {
   }
 }
 
-export function allowanceDirs({ env = {}, input = {}, config }) {
+function localAutoMemoryDir(sessionRoot, home, git) {
+  if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot) || !git) return "";
+  const path = join(sessionRoot, ".claude", "settings.local.json");
+  const dir = autoMemoryDirIn(path, home);
+  return dir && git.isIgnored(sessionRoot, path) ? dir : "";
+}
+
+export function allowanceDirs({ env = {}, input = {}, config, sessionRoot, git }) {
   const home = homeOf(env);
   const configDir = configDirOf(env);
   const dirs = [{ kind: "plans", dir: join(configDir, "plans") }];
-  const autoMem = userAutoMemoryDir(configDir, home);
+  const autoMem = autoMemoryDirIn(join(configDir, "settings.json"), home);
   if (autoMem) dirs.push({ kind: "autoMemoryDirectory", dir: autoMem });
+  const localMem = localAutoMemoryDir(sessionRoot, home, git);
+  if (localMem) dirs.push({ kind: "local-autoMemoryDirectory", dir: localMem });
   const add = (kind, dir) => {
     if (typeof dir === "string" && isAbsolute(dir)) dirs.push({ kind, dir });
   };

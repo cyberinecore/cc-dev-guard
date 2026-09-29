@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.1.12] - 2026-09-29
+
+- `autoMemoryDirectory` set in the session repository's `.claude/settings.local.json` is now an allowance when git ignores that file (D24). A tracked local settings file and the project `.claude/settings.json` are still not trusted.
+
 ## [0.1.11] - 2026-09-28
 
 - `plugin.json` keeps only `privacyPolicyUrl` of the directory listing links; `documentationUrl` and `supportUrl` are dropped because Homepage and Repository already lead to the README and issues, and each unknown key is a portal warning. No behaviour change.

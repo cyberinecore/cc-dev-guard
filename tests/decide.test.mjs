@@ -234,6 +234,16 @@ test("documented allowances pass, and only those", () => {
   writeFileSync(join(f.a, ".claude", "settings.json"), JSON.stringify({ autoMemoryDirectory: join(f.b, "repomem") }));
   wantCross("autoMemoryDirectory from project settings is ignored", c(join(f.b, "repomem", "x.md")));
 
+  writeFileSync(join(f.root, "no-excludes"), "");
+  git(f.a, "config", "core.excludesFile", join(f.root, "no-excludes"));
+  writeFileSync(join(f.a, ".claude", "settings.local.json"), JSON.stringify({ autoMemoryDirectory: join(f.b, "localmem") }));
+  wantCross("autoMemoryDirectory from a local settings file git does not ignore", c(join(f.b, "localmem", "x.md")));
+  writeFileSync(join(f.a, ".gitignore"), ".claude/settings.local.json\n");
+  wantPass("autoMemoryDirectory from a gitignored local settings file", c(join(f.b, "localmem", "x.md")));
+  git(f.a, "add", "-f", ".claude/settings.local.json");
+  wantCross("autoMemoryDirectory from a tracked local settings file", c(join(f.b, "localmem", "x.md")));
+  git(f.a, "rm", "-q", "--cached", ".claude/settings.local.json");
+
   const extra = { ...defaultConfig(), extraAllowedDirs: [join(f.b, "shared")] };
   wantPass("extra_allowed_dirs", run({ cwd: f.a, root: f.a, target: join(f.b, "shared", "x.md"), env, config: extra }));
 });
