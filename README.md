@@ -86,7 +86,7 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 
 ## Limits
 
-- Only the file tools are guarded. Writes made through Bash (`echo >`, `sed -i`, `cp`, `git -C`), MCP tools, or commands you type with `!` are not seen.
+- Only the file tools are guarded. Writes made through Bash (`echo >`, `sed -i`, `cp`, `git -C`), MCP tools, or commands you type with `!` are not seen. Neither are writes by another plugin's hooks module (Claude Mods), and such a module runs before Cyberine DevGuard and can overrule it.
 - Without `read_transcript`, a directory removed from the session during the session stays allowed until the session ends (settings edits apply at once), and `--add-dir` paths containing spaces are not recognized on macOS, where only `ps` output is available. With `read_transcript`, a directory added in the same step as a write is seen from the next step (the snapshot is written after the next tool result).
 - After `/cd`, the session repository stays the one the session started in.
 - A repository you trust can switch Cyberine DevGuard off: Claude Code passes the `env` block of a project's `.claude/settings.json` to hook processes, so a `PATH` without node or a `NODE_OPTIONS` preload stops the hook, and a committed `permissions.additionalDirectories` widens the allowed list. That is Claude Code's workspace-trust boundary; review a repository's `.claude/` before you trust it.
@@ -96,7 +96,7 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 
 ## Platforms
 
-Tested by CI on Linux, macOS and Windows with Node 18, 20 and 22, and measured live on macOS with Claude Code 2.1.283. Windows is best-effort: the unit suite passes there, but no live Windows session has been measured.
+Tested by CI on Linux, macOS and Windows with Node 18, 20 and 22, and measured live on macOS with Claude Code 2.1.283 and 2.1.287. Windows is best-effort: the unit suite passes there, but no live Windows session has been measured.
 
 Hooks run in Claude Code and Cowork; the claude.ai chat surface ignores hooks, so there only the two skills load.
 
