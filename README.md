@@ -48,7 +48,7 @@ Set with the `mode` option (`/config`, or the plugin's configuration dialog).
 | `warn` | Never blocks; shows a notice. |
 | `off` | Does nothing. |
 
-Under `bypassPermissions` Cyberine DevGuard answers `deny` instead of `ask`. Measured on Claude Code 2.1.283: in that mode an `ask` for a path Claude Code treats as sensitive (`.claude/`, `.git/`, `.vscode/`, dotfiles) is handed to the permission pipeline and the write runs anyway. To allow a directory in such a session, add it with `/add-dir`. See `docs/LIVE-MATRIX.md` for every measured row.
+Under `bypassPermissions` Cyberine DevGuard answers `deny` instead of `ask`. Measured on Claude Code 2.1.283 and 2.1.287: in that mode an `ask` for a path Claude Code treats as sensitive (folders such as `.claude/`, `.git/`, `.vscode/`, `.idea/`, `.husky/`, and files such as `.bashrc`, `.gitmodules`, `.mcp.json`) is handed to the permission pipeline and the write runs anyway. To allow a directory in such a session, add it with `/add-dir`. See `docs/LIVE-MATRIX.md` for every measured row.
 
 ## Configuration
 

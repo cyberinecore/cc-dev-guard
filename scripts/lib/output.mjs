@@ -93,7 +93,7 @@ function denyOnce(v, { input, now, markerDir, warnings }) {
   return decision("deny", withWarnings(denyReason(v), warnings));
 }
 
-const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/ and dotfiles), so ${pluginName} denies instead. To allow it, add the directory to the session with /add-dir, or let the user make the change.`;
+const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. To allow it, add the directory to the session with /add-dir, or let the user make the change.`;
 
 function askOrDeny(input, reason) {
   if (input?.permission_mode === "bypassPermissions") return decision("deny", `${reason} ${bypassNote}`);
