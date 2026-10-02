@@ -365,6 +365,7 @@ function gitWriteDir(words, dir, home) {
 export function findWrites(command, { cwd, home }) {
   const found = [];
   const push = (word, base, how, isDir) => {
+    if (!word.dynamic && (/^\/dev\//.test(word.text) || /^nul$/i.test(word.text))) return;
     const target = resolveWord(word, base, home);
     if (target === null || /^\/dev\//.test(target.replace(/\\/g, "/"))) return;
     found.push({ target, how, isDir });
