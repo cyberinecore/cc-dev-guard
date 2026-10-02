@@ -66,13 +66,13 @@ test("a worktree under the repository's .claude/worktrees passes, anything else 
   const g = makeGit();
   const judge = (command, cwd) => judgeWorktreeAdds(command, { cwd, home: f.root, git: g });
   assert.equal(judge("git worktree add .claude/worktrees/a", f.plain).action, "pass");
-  assert.equal(judge(`git -C ${f.plain} worktree add ${join(f.plain, ".claude", "worktrees", "b")}`, f.root).action, "pass");
+  assert.equal(judge(`git -C '${f.plain}' worktree add '${join(f.plain, ".claude", "worktrees", "b")}'`, f.root).action, "pass");
   const tmp = judge("git worktree add /tmp/stray", f.plain);
   assert.equal(tmp.action, "cross");
   assert.equal(tmp.worktreesDir, join(f.plain, ".claude", "worktrees"));
-  assert.equal(judge(`git -C ${f.plain} worktree add ../sibling`, f.root).action, "cross");
+  assert.equal(judge(`git -C '${f.plain}' worktree add ../sibling`, f.root).action, "cross");
   assert.equal(judge("git worktree add .claude/worktrees", f.plain).action, "cross", "the folder itself is not a worktree slot");
-  assert.equal(judge(`git worktree add ${join(f.nest, ".claude", "worktrees", "child")}`, f.nestWt).action, "pass", "a linked worktree uses the main root");
+  assert.equal(judge(`git worktree add '${join(f.nest, ".claude", "worktrees", "child")}'`, f.nestWt).action, "pass", "a linked worktree uses the main root");
   assert.equal(judge("git worktree add .claude/worktrees/nested", f.nestWt).action, "cross", "nesting under a linked worktree is stray");
   assert.equal(judge("git worktree add $D", f.plain).why, "worktree-unresolved");
   assert.equal(judge("git status", f.plain).action, "pass");
