@@ -59,6 +59,14 @@ test("worktree add targets are found through -C, cd, options and prefixes", () =
   assert.deepEqual(target("git --git-dir=/x/.git worktree add w"), ["--git-dir or --work-tree"]);
   assert.deepEqual(target("git worktree list; git worktree prune; echo git worktree add /tmp/z"), []);
   assert.deepEqual(target("git worktree add /tmp/x 2>/dev/null"), [resolve("/tmp/x")]);
+  for (const sub of ["list", "prune", "lock w", "unlock w", "repair", "remove w", "move a b"]) {
+    assert.deepEqual(target(`git -C "$X" worktree ${sub}`), [], `worktree ${sub} with an unresolved -C`);
+    assert.deepEqual(target(`git --git-dir "$G" worktree ${sub}`), [], `worktree ${sub} with --git-dir`);
+  }
+  assert.deepEqual(target("git -C $P/repo worktree list"), []);
+  assert.deepEqual(target(`mkdir -p $P; cd $P; git init -q -b main repo; git -C repo -c user.name=t -c user.email=t@t commit -q --allow-empty -m init; cd repo; claude -p "...EnterWorktree..." --allowedTools=EnterWorktree; git worktree list`), [], "the compound command from the 0.2.0 report");
+  assert.deepEqual(target(`git -C "$X" worktree add w`), ["the -C directory"]);
+  assert.deepEqual(target("cd $P; git -C repo worktree add w"), ["the -C directory"]);
 });
 
 test("a worktree under the repository's .claude/worktrees passes, anything else crosses", () => {

@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.2.1] - 2026-10-02
+
+- Fix: the Bash worktree guard asked about read-only `git worktree` subcommands (`list`, `prune`, ...) and other git commands when `-C`, `--git-dir` or an option could not be resolved, for example after `cd $P` in the same command. An unresolved directory now asks only for `git worktree add`.
+
 ## [0.2.0] - 2026-10-02
 
 - Bash `git worktree add` for a path outside the repository's `.claude/worktrees/`, or nested inside an existing worktree, now asks (deny under bypassPermissions). Option `worktree_guard`, default on; a repository file can only turn it on (D25).

@@ -139,16 +139,22 @@ function isGitWord(w) {
 
 function worktreeAddTarget(words, cwd, home) {
   let gitCwd = cwd;
+  let pending = "";
   let i = 1;
   for (; i < words.length; i++) {
     const w = words[i];
-    if (w.dynamic && w.text.startsWith("-")) return { unresolved: "a git option built from a variable" };
+    if (w.dynamic && w.text.startsWith("-")) {
+      pending ||= "a git option built from a variable";
+      continue;
+    }
     const t = w.text;
     if (t === "-C") {
-      gitCwd = resolveWord(words[++i], gitCwd, home);
-      if (gitCwd === null) return { unresolved: "the -C directory" };
+      const next = resolveWord(words[++i], gitCwd, home);
+      if (next === null) pending ||= "the -C directory";
+      gitCwd = next;
     } else if (GIT_SCOPE_OPTIONS.has(t) || [...GIT_SCOPE_OPTIONS].some((o) => t.startsWith(o + "="))) {
-      return { unresolved: "--git-dir or --work-tree" };
+      pending ||= "--git-dir or --work-tree";
+      if (GIT_SCOPE_OPTIONS.has(t)) i++;
     } else if (GIT_VALUE_OPTIONS.has(t)) {
       i++;
     } else if (t.startsWith("-")) {
@@ -159,6 +165,7 @@ function worktreeAddTarget(words, cwd, home) {
   i++;
   if (words[i]?.dynamic) return { unresolved: "the worktree subcommand" };
   if (words[i]?.text !== "add") return null;
+  if (pending) return { unresolved: pending };
   for (i++; i < words.length; i++) {
     const w = words[i];
     if (w.dynamic) return { unresolved: "the worktree path", gitCwd };
