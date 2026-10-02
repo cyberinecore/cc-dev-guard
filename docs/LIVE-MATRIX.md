@@ -55,3 +55,24 @@ Two hooks answering the same write (measured the same day, `acceptEdits`): devgu
 | bash-tmp-acceptEdits | `git worktree add <fixture>/tmp-ae`, devguard, `acceptEdits` and `--allowedTools "Bash(git worktree add:*)"` | none; the ask held although the command was pre-allowed |
 
 A plugin `WorktreeCreate` hook is not loaded yet when `claude --worktree` creates its worktree at launch; a hook in `--settings` is (measured the same day by the owner's `~/.claude` session, which also measured that two `WorktreeCreate` hooks run in parallel and that an empty stdout fails creation). A first run of the Bash rows the same day is discarded: the prompt ended in "CMD ." and the model passed the dot to git as a commit-ish.
+
+## Bash, MCP and worktree-isolation rows
+
+`tests/live/bash-mcp.sh`: throwaway repositories `a` (session, with a linked worktree `a/.claude/worktrees/w`) and `b` (other). The MCP rows run `@modelcontextprotocol/server-filesystem` through `npx` with `--mcp-config`. The reason column is cut.
+
+2.1.287 (Claude Code), model haiku, 2026-10-02T18:55Z
+
+| row | setup | target written | first devguard message |
+|---|---|---|---|
+| bash-redirect-control | `echo x > b/ctl.txt`, no plugin (positive control) | yes | (no devguard message) |
+| bash-redirect | redirect into b, devguard, bypass | no | cyberine-devguard: `<fx>/b/r.txt` (written by a Bash redirect) ... denies instead |
+| bash-cp-acceptEdits | `cp a/s.txt b/`, devguard, `acceptEdits` and `--allowedTools Bash` | no | cyberine-devguard: `<fx>/b` (written by a Bash cp) is in another repository |
+| bash-same-repo | redirect inside a, devguard, bypass | yes | (no devguard message) |
+| bash-guard-off | redirect into b, `bash_guard=false` | yes on the first run (18:52Z); no on this run, where the model made no tool call | (no devguard message) |
+| mcp-control | MCP `write_file` into b, no plugin, `--add-dir b` (positive control) | yes | (no devguard message) |
+| mcp-write | MCP `write_file` into b, devguard, bypass | no | cyberine-devguard: `<fx>/b/m.txt` is in another repository ... denies instead |
+| isolate-on | Write from worktree w into main checkout a, `isolate_worktrees=true` | no | cyberine-devguard: `<fx>/a/from-wt.txt` is in another worktree ... |
+| isolate-off | the same, default options | yes | (no devguard message) |
+| wt-dup-warning | cyberine-worktree with a second `WorktreeCreate` hook in project settings | - | SessionStart `hook_response` carries "cyberine-worktree: another WorktreeCreate hook is configured (`/opt/other-wt.sh` in ...)" |
+
+Without `--add-dir b`, the filesystem server itself refused the control write ("Access denied - path outside allowed directories"): Claude Code hands the server its session directories as roots, so the server's own limit already covered that case. The devguard row shows the hook answering before the server is called.

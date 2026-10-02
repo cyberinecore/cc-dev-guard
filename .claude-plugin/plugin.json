@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.2.1",
-  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given, and before a Bash git worktree add lands outside the repository's .claude/worktrees/, plus status, explain and worktree report skills.",
+  "version": "0.3.0",
+  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, and before a Bash git worktree add lands outside .claude/worktrees/, plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
     "email": "xinchao@nghia-pham.com"
@@ -65,6 +65,18 @@
       "type": "boolean",
       "title": "Guard git worktree add",
       "description": "Ask before a Bash command runs git worktree add for a path outside the repository's .claude/worktrees/ (for example a /tmp folder). Best effort: it reads the command text, so a script or a variable can hide the path.",
+      "default": true
+    },
+    "isolate_worktrees": {
+      "type": "boolean",
+      "title": "Isolate worktrees",
+      "description": "Ask before a session started in a linked git worktree writes with Write, Edit or NotebookEdit into the main checkout or another worktree of the same repository. Off by default, because many workflows write from a worktree back to the main checkout on purpose.",
+      "default": false
+    },
+    "bash_guard": {
+      "type": "boolean",
+      "title": "Guard obvious Bash writes",
+      "description": "Read each Bash command for obvious write shapes (> and >> redirects, tee, sed -i, cp, mv, install, ln, rsync, touch, mkdir, rm, rmdir, truncate, dd of=, and git commands that change a repository) and treat each target like a file-tool write. Best effort: a script, an alias, a variable or eval can hide a write.",
       "default": true
     }
   }

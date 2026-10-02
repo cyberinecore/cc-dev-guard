@@ -10,13 +10,13 @@
     {
       "name": "cyberine-devguard",
       "source": "./",
-      "description": "PreToolUse hook that asks before Write, Edit or NotebookEdit reach another repository, or a Bash git worktree add lands outside .claude/worktrees/, plus status, explain and worktree report skills.",
+      "description": "PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write reaches another repository, or a Bash git worktree add lands outside .claude/worktrees/, plus status, explain and worktree report skills.",
       "category": "security"
     },
     {
       "name": "cyberine-worktree",
       "source": "./plugins/cyberine-worktree",
-      "description": "WorktreeCreate hook: agent and EnterWorktree worktrees go to <main repository>/.claude/worktrees/<name> on branch worktree/<name>, based on the session's HEAD. Optional; replaces Claude Code's own worktree creation while installed.",
+      "description": "WorktreeCreate hook: agent and EnterWorktree worktrees go to <main repository>/.claude/worktrees/<name> on branch worktree/<name>, based on the session's HEAD, with a session-start warning when another WorktreeCreate hook is configured. Optional; replaces Claude Code's own worktree creation while installed.",
       "category": "development"
     }
   ]

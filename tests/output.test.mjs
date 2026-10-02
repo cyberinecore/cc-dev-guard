@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { readdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { RETRY_WINDOW_MS } from "../scripts/lib/constants.mjs";
 import { render, renderError } from "../scripts/lib/output.mjs";
@@ -127,4 +127,17 @@ test("under bypassPermissions every ask becomes a deny, because the harness lets
   assert.equal(decisionOf(renderError(new Error("boom"), bypass)), "deny");
   assert.equal(decisionOf(render(cross, { mode: "ask", input: { ...input, permission_mode: "acceptEdits" }, now: Date.now(), markerDir: tempDir() })), "ask");
   assert.equal(render(cross, { mode: "warn", input: bypass, now: Date.now(), markerDir: tempDir() }).hookSpecificOutput, undefined, "warn stays a notice");
+});
+
+test("ask, bypass deny and deny-once reasons name /add-dir and extra_allowed_dirs for the target's directory", () => {
+  const dir = dirname("/b/x.md");
+  const ask = render(cross, { mode: "ask", input, now: Date.now(), markerDir: tempDir() }).hookSpecificOutput.permissionDecisionReason;
+  const bypass = render(cross, { mode: "ask", input: { ...input, permission_mode: "bypassPermissions" }, now: Date.now(), markerDir: tempDir() }).hookSpecificOutput.permissionDecisionReason;
+  const once = render(cross, { mode: "deny-once", input, now: Date.now(), markerDir: tempDir() }).hookSpecificOutput.permissionDecisionReason;
+  for (const reason of [ask, bypass, once]) {
+    assert.ok(reason.includes("`/add-dir " + dir + "`"), reason);
+    assert.match(reason, /extra_allowed_dirs/);
+    assert.match(reason, /gitignores/);
+  }
+  assert.doesNotMatch(bypass, /add the directory to the session/);
 });

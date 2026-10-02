@@ -33,15 +33,19 @@ test("cyberine-worktree is a self-contained plugin with one WorktreeCreate hook"
   assert.equal(m.name, "cyberine-worktree");
   for (const field of ["description", "version", "license", "homepage", "repository"]) assert.ok(m[field], `plugin.json ${field}`);
   const h = readJson(base + "/hooks/hooks.json");
-  assert.deepEqual(Object.keys(h.hooks), ["WorktreeCreate"]);
+  assert.deepEqual(Object.keys(h.hooks), ["WorktreeCreate", "SessionStart"]);
+  assert.deepEqual(h.hooks.SessionStart[0].hooks[0].args, ["${CLAUDE_PLUGIN_ROOT}/scripts/session-start.mjs"]);
+  assert.ok(existsSync(join(root, base, ".claude-plugin", "icon.png")), "cyberine-worktree ships an icon");
   const [entry] = h.hooks.WorktreeCreate;
   assert.equal(entry.matcher, undefined, "WorktreeCreate ignores matchers");
   const [cmd] = entry.hooks;
   assert.equal(cmd.command, "node");
   assert.deepEqual(cmd.args, ["${CLAUDE_PLUGIN_ROOT}/scripts/worktree-create.mjs"]);
   assert.ok(Number.isInteger(cmd.timeout) && cmd.timeout > 0 && cmd.timeout <= 60);
-  const script = readFileSync(join(root, base, "scripts", "worktree-create.mjs"), "utf8");
-  for (const m of script.matchAll(/from "([^"]+)"/g)) assert.ok(m[1].startsWith("node:"), `imports only node builtins, not ${m[1]}`);
+  for (const f of ["worktree-create.mjs", "session-start.mjs"]) {
+    const script = readFileSync(join(root, base, "scripts", f), "utf8");
+    for (const m of script.matchAll(/from "([^"]+)"/g)) assert.ok(m[1].startsWith("node:"), `${f} imports only node builtins, not ${m[1]}`);
+  }
 });
 
 test("the module that runs git holds no template literal the directory scan could read as an assembled command", () => {
@@ -68,7 +72,7 @@ test("hooks.json runs node on a file inside the plugin, exec form, with a timeou
   assert.equal(start.command, "node");
   assert.deepEqual(start.args, ["${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs", "session-start"]);
   const entries = h.hooks.PreToolUse;
-  assert.deepEqual(entries.map((e) => e.matcher), ["Write|Edit|NotebookEdit", "Bash"]);
+  assert.deepEqual(entries.map((e) => e.matcher), ["Write|Edit|NotebookEdit", "Bash", "mcp__.*__(write_file|edit_file|create_directory|move_file)"]);
   assert.deepEqual(entries[1].hooks[0].args, ["${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs", "hook"]);
   const [cmd] = entries[0].hooks;
   assert.equal(cmd.type, "command");

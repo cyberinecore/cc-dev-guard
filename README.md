@@ -2,7 +2,7 @@
 
 ![Cyberine DevGuard: the session repository inside a boundary, a write to another repository paused at the edge](assets/banner.png)
 
-A Claude Code plugin that keeps a session inside its own repository. When Claude is about to Write, Edit or NotebookEdit a file in a different git repository that the session was not given, Cyberine DevGuard stops and asks you first. Writes inside the session's repository and its worktrees, its allowed directories (`--add-dir`, `/add-dir`, `permissions.additionalDirectories`), paths the other repository gitignores, non-git directories, and Claude Code's own memory and plan folders pass without a prompt.
+A Claude Code plugin that keeps a session inside its own repository. When Claude is about to write a file in a different git repository that the session was not given, through Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP tool, Cyberine DevGuard stops and asks you first. Writes inside the session's repository and its worktrees, its allowed directories (`--add-dir`, `/add-dir`, `permissions.additionalDirectories`), paths the other repository gitignores, non-git directories, and Claude Code's own memory and plan folders pass without a prompt.
 
 It also keeps git worktrees where you can find them. A Bash `git worktree add` aimed outside the repository's `.claude/worktrees/` (a `/tmp` folder that later vanishes and leaves a stale record behind, a sibling directory) asks first, `/cyberine-devguard:worktrees` reports the stray, prunable and merged worktrees you already have, and the optional companion plugin `cyberine-worktree` routes every worktree Claude Code creates to `<main repository>/.claude/worktrees/<name>`.
 
@@ -34,12 +34,12 @@ Cyberine DevGuard needs Claude Code 2.1.219 or later and Node.js 18 or later on 
 
 ## What happens on a write
 
-For every Write, Edit and NotebookEdit, the hook resolves the target path (following symlinks in the part that exists) and compares the target's git repository with the session's.
+For every Write, Edit and NotebookEdit, for each obvious write in a Bash command, and for the write tools of the reference filesystem MCP server, the hook resolves the target path (following symlinks in the part that exists) and compares the target's git repository with the session's.
 
-- The session's repository is the one Claude Code was started in (`CLAUDE_PROJECT_DIR`). A later `cd` does not move it; a `--worktree` session counts its main checkout as the same repository.
+- The session's repository is the one Claude Code was started in (`CLAUDE_PROJECT_DIR`). A later `cd` does not move it; a `--worktree` session counts its main checkout as the same repository. Every worktree of one repository is one scope unless you turn on `isolate_worktrees`.
 - The hook never answers `allow` and never approves a tool call: it either stays silent, so Claude Code's normal permission rules decide, or it answers `ask` (`deny` under `bypassPermissions` and in `deny-once` mode).
 - Passes without a word: the same repository (worktrees included), a directory that is not inside any git repository, a path the other repository ignores (`allow_ignored`, default on), an allowed directory of the session, and Claude Code's own folders (`~/.claude/projects/*/memory/`, `~/.claude/plans/`, an `autoMemoryDirectory` from user settings or from a gitignored `.claude/settings.local.json`, the session scratchpad and a background job's `tmp/`).
-- Everything else is a crossing. What happens then depends on the mode.
+- Everything else is a crossing. What happens then depends on the mode. The reason names the fix: `/add-dir <directory>` for this session, or the `extra_allowed_dirs` option for every session.
 - Always asked about, even inside the session's repository: `.claude/cyberine-devguard.json`, Claude Code settings files (`.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings.json`), session transcripts, Cyberine DevGuard's own data directory, and paths a repository protects with `protect`. Each of these can widen what the session may write.
 - A session started outside any git repository is not guarded.
 
@@ -69,6 +69,8 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts) |
 | `allow_ignored` | `true` | let writes to paths the other repository gitignores pass |
 | `log_decisions` | `false` | append each crossing (time, session id, tool, path, verdict) to `decisions.jsonl` in the plugin data directory |
+| `bash_guard` | `true` | read each Bash command for obvious writes (see [Bash and MCP writes](#bash-and-mcp-writes)) and treat each target like a file-tool write |
+| `isolate_worktrees` | `false` | ask before a session started in a linked worktree writes into the main checkout or another worktree of the same repository (file tools, Bash writes, MCP writes) |
 | `worktree_guard` | `true` | ask before a Bash `git worktree add` whose path lies outside the repository's `.claude/worktrees/` |
 | `read_transcript` | `false` | take the allowed directories from the environment snapshot in the session transcript instead of settings, `/add-dir` and `--add-dir`; the only setting that makes Cyberine DevGuard open the transcript |
 
@@ -84,15 +86,28 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 
 - `mode` can only be raised (`off` < `warn` < `deny-once` < `ask`), never set to `off`.
 - `allowIgnored` can only be turned off.
-- `worktreeGuard` can only be turned on.
+- `worktreeGuard`, `bashGuard` and `isolateWorktrees` can only be turned on.
 - `protect` lists paths relative to the repository; writes under them ask.
 - Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its committed `.claude/settings.json`.
+
+## Bash and MCP writes
+
+Write, Edit and NotebookEdit are not the only way an agent writes. With `bash_guard` on (the default), the hook also reads each Bash command for obvious write shapes and judges every target exactly like a file-tool write, with the same allowances and the same answers:
+
+- `>`, `>>`, `&>` and `>|` redirects (not `2>&1`-style descriptor copies, not `/dev/*`), `tee`, `sed -i`, `dd of=`;
+- destinations of `cp`, `mv`, `install`, `ln` and `rsync` (the last operand, or `-t`), skipping remote `host:path` targets;
+- `touch`, `mkdir`, `rm`, `rmdir` and `truncate` operands;
+- `git` commands that change a repository (`add`, `commit`, `checkout`, `reset`, `merge`, `rebase`, `stash` and similar) run with `-C <dir>` or after a `cd` in the same command.
+
+The parser follows quotes, `cd` within the command, subshells and heredocs (a heredoc body is data, not commands). A target built from a variable or command substitution is skipped rather than asked about, to keep the prompt for real crossings. This is best effort: a script, an alias, `sh -c`, `eval`, or a program that writes files on its own are not seen. A process started through Bash, such as another coding tool or a build script, writes wherever it likes.
+
+Write tools of the reference filesystem MCP server (`@modelcontextprotocol/server-filesystem`) are judged too: `write_file`, `edit_file` (not with `dryRun`), `create_directory`, and `move_file` (both the source and the destination). A tool is matched by its name and by that server's documented input schema, so a different server's tool with the same name but other arguments is left alone. Other MCP servers are not seen.
 
 ## Worktrees
 
 Agents tend to create extra git worktrees in scratch folders. When the folder goes, the worktree record stays, and a repository collects dozens of entries that point at nothing. Cyberine DevGuard handles this in three parts; nothing is banned, and nothing is ever deleted for you.
 
-- **Bash guard** (in `cyberine-devguard`, option `worktree_guard`, default on). Before a Bash command runs `git worktree add`, the hook reads the target path, following `git -C <dir>`, an earlier `cd` in the same command, and `~`. A path directly under the repository's main `.claude/worktrees/` passes. A path anywhere else asks, and so does one nested inside an existing worktree there, or one built from a variable. The ask points the agent at the Agent tool's `isolation: "worktree"` or `EnterWorktree`, or tells it to stay in the checkout and use a scratch directory. Like every Cyberine DevGuard ask, it becomes a deny under bypassPermissions. This is a guardrail, not a boundary: it reads the command text, so a script, an alias, `sh -c` or `eval` can hide the call. The matcher adds about 10 ms to each Bash call, and a command that does not contain `worktree` returns before any git call.
+- **Bash guard** (in `cyberine-devguard`, option `worktree_guard`, default on). Before a Bash command runs `git worktree add`, the hook reads the target path, following `git -C <dir>`, an earlier `cd` in the same command, and `~`. A path directly under the repository's main `.claude/worktrees/` passes. A path anywhere else asks, and so does one nested inside an existing worktree there, or one built from a variable. The ask points the agent at the Agent tool's `isolation: "worktree"` or `EnterWorktree`, or tells it to stay in the checkout and use a scratch directory. Like every Cyberine DevGuard ask, it becomes a deny under bypassPermissions. This is a guardrail, not a boundary: it reads the command text, so a script, an alias, `sh -c` or `eval` can hide the call. The Bash matcher costs about 13 ms per call over a bare node start when the command has no write shape, and about 47 ms when it writes, for the git lookups (measured on macOS, 2026-10-03).
 - **Report** (`/cyberine-devguard:worktrees [dir]`, or `node <plugin dir>/scripts/devguard.mjs worktrees [dir...] [--no-gh]`). For each repository at or up to three levels under the directory, it lists worktrees whose directory is gone (prunable), worktrees outside `.claude/worktrees/`, and worktrees whose branch is merged. Merged branches are looked up with `gh pr view <branch> --json state,mergedAt,number` under your active `gh` account, because an ancestry check misses squash merges. Without `gh`, or with `--no-gh`, a branch counts only when the default branch already contains it, and such a branch is labelled "merged or empty". The report prints the cleanup commands and runs none of them.
 - **Placement** (separate plugin `cyberine-worktree`, opt-in by installing it). A `WorktreeCreate` hook creates every worktree for the Agent tool's `isolation: "worktree"` and for `EnterWorktree`. Each goes to `<main repository>/.claude/worktrees/<name>` on branch `worktree/<name>`, with `git worktree add --no-track -B`, based on the spawning session's `HEAD`. The main repository is resolved even from inside a linked worktree, so a subagent spawned from a worktree lands beside it, not inside it. A submodule session keeps its worktrees under the submodule. Re-running for an existing worktree prints its path again. It is a separate plugin because Claude Code hands worktree creation entirely to such a hook: the hook cannot fall back to the built-in behaviour, which means `worktreeBaseRef` and the built-in branch naming no longer apply while it is installed.
 
@@ -111,7 +126,8 @@ Disable any other `WorktreeCreate` hook first: Claude Code runs every `WorktreeC
 
 ## Limits
 
-- Only the file tools are guarded, plus `git worktree add` in Bash (best effort, see [Worktrees](#worktrees)). Other writes made through Bash (`echo >`, `sed -i`, `cp`, `git -C`), MCP tools, or commands you type with `!` are not seen. Neither are writes by another plugin's hooks module (Claude Mods), and such a module runs before Cyberine DevGuard and can overrule it.
+- Guarded: the file tools, obvious Bash writes and `git worktree add` (best effort, see [Bash and MCP writes](#bash-and-mcp-writes) and [Worktrees](#worktrees)), and the reference filesystem MCP server. Not seen: writes hidden inside scripts or `sh -c`, files written by a process that Bash starts, other MCP servers, commands you type with `!`, and writes by another plugin's hooks module (Claude Mods), which runs before Cyberine DevGuard and can overrule it.
+- A git worktree is not a boundary by default: every worktree of a repository is the session's own repository, so a session in a worktree may write into the main checkout. Turn on `isolate_worktrees` to ask about that. Neither a worktree nor Cyberine DevGuard contains a child process started through Bash.
 - Without `read_transcript`, a directory removed from the session during the session stays allowed until the session ends (settings edits apply at once), and `--add-dir` paths containing spaces are not recognized on macOS, where only `ps` output is available. With `read_transcript`, a directory added in the same step as a write is seen from the next step (the snapshot is written after the next tool result).
 - After `/cd`, the session repository stays the one the session started in.
 - A repository you trust can switch Cyberine DevGuard off: Claude Code passes the `env` block of a project's `.claude/settings.json` to hook processes, so a `PATH` without node or a `NODE_OPTIONS` preload stops the hook, and a committed `permissions.additionalDirectories` widens the allowed list. That is Claude Code's workspace-trust boundary; review a repository's `.claude/` before you trust it.

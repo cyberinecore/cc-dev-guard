@@ -28,6 +28,20 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "mcp__.*__(write_file|edit_file|create_directory|move_file)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs",
+              "hook"
+            ],
+            "timeout": 15
+          }
+        ]
       }
     ],
     "SessionStart": [

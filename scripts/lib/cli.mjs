@@ -10,7 +10,8 @@ const version = VERSION;
 import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
-import { judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
+import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
+import { mcpWriteTargets } from "./mcpfs.mjs";
 import { render, renderError, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
@@ -67,7 +68,8 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
       return renderError(new Error("the hook input is not valid JSON"));
     }
     if (!input || typeof input !== "object" || Array.isArray(input)) return renderError(new Error("the hook input is not a JSON object"));
-    if (input.tool_name === "Bash") return bashHook(input, env, deps);
+    if (input.tool_name === "Bash") return bashHook(input, env, deps, now);
+    if (typeof input.tool_name === "string" && input.tool_name.startsWith("mcp__")) return mcpHook(input, env, deps, now);
     const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
     const config = loadConfig({ env, sessionRoot });
     if (config.mode === "off") return null;
@@ -80,15 +82,52 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
   }
 }
 
-function bashHook(input, env, deps) {
+function bashHook(input, env, deps, now) {
   const command = input.tool_input?.command;
-  if (!mentionsWorktree(command)) return null;
+  if (typeof command !== "string" || command === "") return null;
+  const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
+  const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : sessionRoot;
+  const home = env.HOME || env.USERPROFILE || "";
+  const writes = findWrites(command, { cwd, home });
+  const worktree = mentionsWorktree(command);
+  if (!writes.length && !worktree) return null;
+  const config = loadConfig({ env, sessionRoot });
+  if (config.mode === "off") return null;
+  const git = deps.git || makeGit();
+  if (worktree && config.worktreeGuard) {
+    const out = renderWorktree(judgeWorktreeAdds(command, { cwd, home, git }), { mode: config.mode, input, warnings: config.warnings });
+    if (out) return out;
+  }
+  if (!config.bashGuard) return null;
+  for (const w of writes) {
+    const probe = w.isDir ? join(w.target, ".devguard-probe") : w.target;
+    const verdict = (deps.decide || decide)({ ...input, tool_name: "Bash", tool_input: { file_path: probe } }, { sessionRoot, env, config, deps: { git } });
+    if (verdict.action !== "cross") continue;
+    const shown = { ...verdict, target: w.target, via: w.how };
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings });
+    if (config.logDecisions) logDecision(env, input, shown, out, now);
+    if (out) return out;
+  }
+  return null;
+}
+
+function mcpHook(input, env, deps, now) {
+  const targets = mcpWriteTargets(input.tool_name, input.tool_input);
+  if (!targets || !targets.length) return null;
   const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
   const config = loadConfig({ env, sessionRoot });
-  if (config.mode === "off" || !config.worktreeGuard) return null;
-  const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : sessionRoot;
-  const verdict = judgeWorktreeAdds(command, { cwd, home: env.HOME || env.USERPROFILE || "", git: deps.git || makeGit() });
-  return renderWorktree(verdict, { mode: config.mode, input, warnings: config.warnings });
+  if (config.mode === "off") return null;
+  const git = deps.git || makeGit();
+  for (const t of targets) {
+    const probe = t.isDir ? join(t.path, ".devguard-probe") : t.path;
+    const verdict = (deps.decide || decide)({ ...input, tool_input: { file_path: probe } }, { sessionRoot, env, config, deps: { git } });
+    if (verdict.action !== "cross") continue;
+    const shown = { ...verdict, target: t.path };
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings });
+    if (config.logDecisions) logDecision(env, input, shown, out, now);
+    if (out) return out;
+  }
+  return null;
 }
 
 function parseArgs(args) {
@@ -149,6 +188,9 @@ function describeSession(opts, env) {
     `mode: ${config.mode}`,
     `allow ignored: ${config.allowIgnored}`,
     `read transcript: ${config.readTranscript}`,
+    `bash guard: ${config.bashGuard}`,
+    `worktree guard: ${config.worktreeGuard}`,
+    `isolate worktrees: ${config.isolateWorktrees}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
     `repo config file: ${config.repoFile || "none"}`,

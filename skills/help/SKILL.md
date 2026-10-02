@@ -27,4 +27,6 @@ Configuration:
 
 Worktrees: a Bash `git worktree add` outside the repository's `.claude/worktrees/` asks (option `worktree_guard`, default on; best effort, it reads the command text). `/cyberine-devguard:worktrees` reports stray, prunable and merged worktrees and deletes nothing. The optional plugin `cyberine-worktree` places every agent and `EnterWorktree` worktree under `<main repository>/.claude/worktrees/`; disable any other `WorktreeCreate` hook when installing it.
 
-Limits: other writes through Bash, MCP tools, or commands you type with `!` are not seen. Without `read_transcript`, a directory removed during the session stays allowed until it ends. Cyberine DevGuard needs `node` on the PATH; without it, or when the hook times out, writes are not checked.
+Bash and MCP: obvious Bash writes (redirects, `tee`, `sed -i`, `cp`/`mv`/`rsync` destinations, `touch`/`mkdir`/`rm`, git commands that change a repository) and the reference filesystem MCP server's write tools are judged like file-tool writes (option `bash_guard`, default on; best effort). `isolate_worktrees` (default off) makes the other worktrees of the session's repository count as outside it.
+
+Limits: writes hidden in scripts or `sh -c`, files written by a process Bash starts, other MCP servers, or commands you type with `!` are not seen. Without `read_transcript`, a directory removed during the session stays allowed until it ends. Cyberine DevGuard needs `node` on the PATH; without it, or when the hook times out, writes are not checked.

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { ALLOWED_DIRS_SHOWN, NAME, REPO_CONFIG_FILE, RETRY_WINDOW_MS } from "./constants.mjs";
 
 const pluginName = NAME;
@@ -48,13 +48,27 @@ function alwaysAskReason(v) {
   }
 }
 
+export function fixHint(v) {
+  const dir = dirname(v.resolved || v.target);
+  return `To allow it, the user can run \`/add-dir ${dir}\` for this session, or add \`${dir}\` to the ${pluginName} option extra_allowed_dirs (/config) for every session; a path the other repository gitignores also passes.`;
+}
+
+function worktreeScope(v) {
+  return `in another worktree of this repository (\`${v.targetTop}\`), outside this session's worktree \`${v.sessionTop}\`, and the isolate_worktrees option is on`;
+}
+
+function via(v) {
+  return v.via ? ` (written by a Bash ${v.via})` : "";
+}
+
 export function askReason(v) {
+  if (v.why === "other-worktree") return `${pluginName}: \`${v.target}\`${via(v)} is ${worktreeScope(v)}. Approve only if you want this session to write there. ${fixHint(v)} If nobody can answer this prompt, report the write to the user instead of retrying it another way.`;
   const where = v.targetTop ? ` (\`${v.targetTop}\`)` : "";
-  return `${pluginName}: \`${v.target}\` is in another repository${where}, ${scopeText(v)}. Approve only if you want this session to write there. If nobody can answer this prompt, report the write to the user instead of retrying it another way.`;
+  return `${pluginName}: \`${v.target}\`${via(v)} is in another repository${where}, ${scopeText(v)}. Approve only if you want this session to write there. ${fixHint(v)} If nobody can answer this prompt, report the write to the user instead of retrying it another way.`;
 }
 
 export function denyReason(v) {
-  return `Default: NO. \`${v.target}\` is ${scopeText(v)}. Retry only if the user explicitly names that target this turn; otherwise report instead. (${pluginName} deny-once: a retry within ${retryMinutes} minutes passes.)`;
+  return `Default: NO. \`${v.target}\`${via(v)} is ${v.why === "other-worktree" ? worktreeScope(v) : scopeText(v)}. Retry only if the user explicitly names that target this turn; otherwise report instead. ${fixHint(v)} (${pluginName} deny-once: a retry within ${retryMinutes} minutes passes.)`;
 }
 
 function markerName(input, v) {
@@ -93,7 +107,7 @@ function denyOnce(v, { input, now, markerDir, warnings }) {
   return decision("deny", withWarnings(denyReason(v), warnings));
 }
 
-const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. To allow it, add the directory to the session with /add-dir, or let the user make the change.`;
+const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. Follow the fix named above, or let the user make the change.`;
 
 function askOrDeny(input, reason) {
   if (input?.permission_mode === "bypassPermissions") return decision("deny", `${reason} ${bypassNote}`);

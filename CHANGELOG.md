@@ -2,6 +2,15 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.3.0] - 2026-10-03
+
+- Obvious Bash writes are judged like file-tool writes: redirects, `tee`, `sed -i`, `dd of=`, `cp`/`mv`/`install`/`ln`/`rsync` destinations, `touch`/`mkdir`/`rm`/`rmdir`/`truncate`, and git commands that change a repository. Option `bash_guard`, default on (D28).
+- Write tools of the reference filesystem MCP server (`write_file`, `edit_file`, `create_directory`, `move_file`) are judged too, matched by name and input schema (D29).
+- New option `isolate_worktrees`, default off: a session in a linked worktree is asked before it writes into the main checkout or another worktree (D30).
+- Ask and deny reasons name the fix: `/add-dir <directory>` and `extra_allowed_dirs` (D31).
+- README states that a worktree and a child process started through Bash are not boundaries.
+- cyberine-worktree 0.2.0: warns at session start when another `WorktreeCreate` hook is configured, and ships an icon (D32).
+
 ## [0.2.1] - 2026-10-02
 
 - Fix: the Bash worktree guard asked about read-only `git worktree` subcommands (`list`, `prune`, ...) and other git commands when `-C`, `--git-dir` or an option could not be resolved, for example after `cd $P` in the same command. An unresolved directory now asks only for `git worktree add`.

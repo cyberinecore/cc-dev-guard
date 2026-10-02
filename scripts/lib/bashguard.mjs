@@ -16,14 +16,34 @@ export function mentionsWorktree(command) {
 export function tokenize(command) {
   const tokens = [];
   let word = null;
+  let expectDelimiter = null;
+  const heredocs = [];
   const startWord = () => {
     if (!word) word = { text: "", dynamic: false };
   };
   const endWord = () => {
-    if (word) tokens.push(word);
+    if (!word) return;
+    tokens.push(word);
+    if (expectDelimiter) {
+      heredocs.push({ delimiter: word.text, strip: expectDelimiter.strip });
+      expectDelimiter = null;
+    }
     word = null;
   };
   const s = String(command);
+  const skipHeredocs = (from) => {
+    let pos = from;
+    for (const h of heredocs.splice(0)) {
+      for (;;) {
+        if (pos >= s.length) return s.length;
+        const nl = s.indexOf("\n", pos);
+        const line = s.slice(pos, nl < 0 ? s.length : nl);
+        pos = nl < 0 ? s.length : nl + 1;
+        if ((h.strip ? line.replace(/^\t+/, "") : line) === h.delimiter) break;
+      }
+    }
+    return pos;
+  };
   for (let i = 0; i < s.length; i++) {
     const c = s[i];
     if (c === "\\") {
@@ -78,7 +98,21 @@ export function tokenize(command) {
       endWord();
       continue;
     }
+    if (c === "\n") {
+      endWord();
+      tokens.push({ op: "\n" });
+      if (heredocs.length) i = skipHeredocs(i + 1) - 1;
+      continue;
+    }
     const two = s.slice(i, i + 2);
+    if (two === "&>") {
+      endWord();
+      let j = i + 2;
+      if (s[j] === ">") j++;
+      tokens.push({ redirect: s.slice(i, j) });
+      i = j - 1;
+      continue;
+    }
     if (two === "&&" || two === "||" || two === "|&") {
       endWord();
       tokens.push({ op: two });
@@ -91,11 +125,15 @@ export function tokenize(command) {
       continue;
     }
     if (c === ">" || c === "<") {
-      endWord();
+      if (word && !word.dynamic && /^[0-9]+$/.test(word.text)) word = null;
+      else endWord();
       let j = i + 1;
-      while (s[j] === ">" || s[j] === "&" || s[j] === "|") j++;
+      while (j < s.length && "<>&|".includes(s[j])) j++;
+      if (s.slice(i, j) === "<<" && s[j] === "-") j++;
+      const op = s.slice(i, j);
+      tokens.push({ redirect: op });
+      if (op === "<<" || op === "<<-") expectDelimiter = { strip: op === "<<-" };
       i = j - 1;
-      tokens.push({ redirect: true });
       continue;
     }
     startWord();
@@ -185,31 +223,32 @@ function worktreeAddTarget(words, cwd, home) {
   return { target, gitCwd };
 }
 
-export function findWorktreeAdds(command, { cwd, home }) {
-  const found = [];
+export function parseCommands(command, { cwd, home }) {
+  const out = [];
   const stack = [];
   let dir = typeof cwd === "string" && isAbsolute(cwd) ? cwd : null;
   let words = [];
+  let redirects = [];
   const flush = () => {
     const cmd = stripPrefix(words);
+    if (cmd.length || redirects.length) out.push({ words: cmd, dir, redirects });
     words = [];
-    if (cmd.length === 0) return;
-    if (!cmd[0].dynamic && (cmd[0].text === "cd" || cmd[0].text === "pushd")) {
+    redirects = [];
+    if (cmd.length && !cmd[0].dynamic && (cmd[0].text === "cd" || cmd[0].text === "pushd")) {
       const arg = cmd.slice(1).find((w) => w.dynamic || w.text === "-" || !w.text.startsWith("-"));
       if (arg && !arg.dynamic && arg.text === "-") dir = null;
       else dir = arg ? resolveWord(arg, dir, home) : home || null;
-      return;
-    }
-    if (isGitWord(cmd[0])) {
-      const hit = worktreeAddTarget(cmd, dir, home);
-      if (hit) found.push(hit);
     }
   };
   const tokens = tokenize(command);
   for (let k = 0; k < tokens.length; k++) {
     const t = tokens[k];
     if (t.redirect) {
-      k++;
+      const next = tokens[k + 1];
+      if (next && next.text !== undefined) {
+        redirects.push({ op: t.redirect, word: next });
+        k++;
+      }
       continue;
     }
     if (t.op) {
@@ -221,6 +260,134 @@ export function findWorktreeAdds(command, { cwd, home }) {
     words.push(t);
   }
   flush();
+  return out;
+}
+
+export function findWorktreeAdds(command, { cwd, home }) {
+  const found = [];
+  for (const seg of parseCommands(command, { cwd, home })) {
+    if (!seg.words.length || !isGitWord(seg.words[0])) continue;
+    const hit = worktreeAddTarget(seg.words, seg.dir, home);
+    if (hit) found.push(hit);
+  }
+  return found;
+}
+
+const GIT_WRITE_SUBCOMMANDS = new Set(["add", "am", "apply", "checkout", "cherry-pick", "clean", "commit", "merge", "mv", "pull", "rebase", "reset", "restore", "revert", "rm", "stash", "switch"]);
+const SED_VALUE_OPTIONS = new Set(["-e", "-f", "--expression", "--file", "-l", "--line-length"]);
+const COPY_VALUE_OPTIONS = new Set(["-S", "--suffix", "-e", "--rsh", "-f", "--filter", "-T", "--temp-dir", "-B", "--block-size", "--exclude", "--include", "--exclude-from", "--include-from", "--files-from", "-m", "--mode", "-o", "--owner", "-g", "--group"]);
+
+function commandName(w) {
+  if (!w || w.dynamic) return "";
+  const t = w.text.replace(/\\/g, "/");
+  return t.slice(t.lastIndexOf("/") + 1).replace(/\.exe$/i, "");
+}
+
+function operands(words, valueOptions = new Set()) {
+  const out = [];
+  let endOfOptions = false;
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    if (!endOfOptions && !w.dynamic && w.text === "--") {
+      endOfOptions = true;
+      continue;
+    }
+    if (!endOfOptions && !w.dynamic && w.text.startsWith("-") && w.text !== "-") {
+      if (valueOptions.has(w.text)) i++;
+      continue;
+    }
+    out.push(w);
+  }
+  return out;
+}
+
+function sedFiles(words) {
+  let inPlace = false;
+  let scriptGiven = false;
+  const rest = [];
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    const t = w.text;
+    if (!w.dynamic && (t === "-i" || t === "--in-place")) {
+      inPlace = true;
+      const next = words[i + 1];
+      if (t === "-i" && next && !next.dynamic && (next.text === "" || next.text.startsWith("."))) i++;
+      continue;
+    }
+    if (!w.dynamic && (/^-i./.test(t) || t.startsWith("--in-place=") || /^-[a-zA-Z]*i[a-zA-Z]*$/.test(t))) {
+      inPlace = true;
+      continue;
+    }
+    if (!w.dynamic && SED_VALUE_OPTIONS.has(t)) {
+      scriptGiven = true;
+      i++;
+      continue;
+    }
+    if (!w.dynamic && (t.startsWith("--expression=") || t.startsWith("--file="))) {
+      scriptGiven = true;
+      continue;
+    }
+    if (!w.dynamic && t.startsWith("-") && t !== "-") continue;
+    rest.push(w);
+  }
+  if (!inPlace) return [];
+  return scriptGiven ? rest : rest.slice(1);
+}
+
+function copyDestination(words) {
+  for (let i = 1; i < words.length; i++) {
+    const t = words[i].text;
+    if (words[i].dynamic) continue;
+    if (t === "-t" || t === "--target-directory") return words[i + 1] ? [words[i + 1]] : [];
+    if (t.startsWith("--target-directory=")) return [{ text: t.slice("--target-directory=".length), dynamic: false }];
+  }
+  const ops = operands(words, COPY_VALUE_OPTIONS);
+  const dest = ops.length >= 2 ? ops[ops.length - 1] : null;
+  if (!dest || (!dest.dynamic && /^[^/\\]+:/.test(dest.text) && !/^[A-Za-z]:[/\\]/.test(dest.text))) return [];
+  return [dest];
+}
+
+function gitWriteDir(words, dir, home) {
+  let gitCwd = dir;
+  let i = 1;
+  for (; i < words.length; i++) {
+    const w = words[i];
+    if (w.dynamic) return null;
+    if (w.text === "-C") gitCwd = resolveWord(words[++i], gitCwd, home);
+    else if (GIT_SCOPE_OPTIONS.has(w.text) || GIT_VALUE_OPTIONS.has(w.text)) i++;
+    else if (!w.text.startsWith("-")) break;
+  }
+  const sub = words[i];
+  if (!sub || sub.dynamic || !GIT_WRITE_SUBCOMMANDS.has(sub.text)) return null;
+  return gitCwd;
+}
+
+export function findWrites(command, { cwd, home }) {
+  const found = [];
+  const push = (word, base, how, isDir) => {
+    const target = resolveWord(word, base, home);
+    if (target === null || /^\/dev\//.test(target.replace(/\\/g, "/"))) return;
+    found.push({ target, how, isDir });
+  };
+  for (const seg of parseCommands(command, { cwd, home })) {
+    for (const r of seg.redirects) {
+      if (!r.op.includes(">") || r.op === "<>") continue;
+      if ((r.op.endsWith("&") || r.op === ">&") && !r.word.dynamic && /^([0-9]+|-)$/.test(r.word.text)) continue;
+      push(r.word, seg.dir, "redirect", false);
+    }
+    const name = commandName(seg.words[0]);
+    if (!name) continue;
+    if (name === "tee") for (const w of operands(seg.words, new Set())) push(w, seg.dir, "tee", false);
+    else if (name === "sed" || name === "gsed") for (const w of sedFiles(seg.words)) push(w, seg.dir, "sed -i", false);
+    else if (["cp", "mv", "install", "ln", "rsync"].includes(name)) for (const w of copyDestination(seg.words)) push(w, seg.dir, name, true);
+    else if (["touch", "rm", "rmdir", "truncate", "mkdir"].includes(name)) for (const w of operands(seg.words, new Set(["-s", "--size", "-m", "--mode", "-r", "--reference", "-t", "-d"]))) push(w, seg.dir, name, name === "mkdir" || name === "rmdir");
+    else if (name === "dd") {
+      for (const w of seg.words.slice(1)) if (!w.dynamic && w.text.startsWith("of=")) push({ text: w.text.slice(3), dynamic: false }, seg.dir, "dd", false);
+    } else if (name === "git") {
+      const gitCwd = gitWriteDir(seg.words, seg.dir, home);
+      if (gitCwd) found.push({ target: gitCwd, how: "git", isDir: true });
+    }
+  }
   return found;
 }
 

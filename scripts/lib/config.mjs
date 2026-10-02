@@ -17,6 +17,8 @@ export function defaultConfig() {
     logDecisions: false,
     readTranscript: false,
     worktreeGuard: true,
+    isolateWorktrees: false,
+    bashGuard: true,
     protect: [],
     repoFile: null,
     warnings: [],
@@ -34,7 +36,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -132,6 +134,15 @@ function applyRepoFile(c, file) {
       if (value === true) c.worktreeGuard = true;
       else if (value === false) w.push(`${where} worktreeGuard false is ignored: a repository file can only make the guard stricter`);
       else w.push(`${where} worktreeGuard must be true or false; ignored`);
+    } else if (optionName === "bashGuard") {
+      if (value === true) c.bashGuard = true;
+      else if (value === false) w.push(`${where} bashGuard false is ignored: a repository file can only make the guard stricter`);
+      else w.push(`${where} bashGuard must be true or false; ignored`);
+    } else if (optionName === "isolateWorktrees") {
+      if (value === true) c.isolateWorktrees = true;
+      else if (value === false) {
+        if (c.isolateWorktrees) w.push(`${where} isolateWorktrees false is ignored: a repository file can only make the guard stricter`);
+      } else w.push(`${where} isolateWorktrees must be true or false; ignored`);
     } else if (WIDENING_KEYS.has(optionName)) {
       w.push(`${where} ${optionName} is ignored: a repository file cannot widen what the session may write`);
     } else {
@@ -163,6 +174,8 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.logDecisions = parseBool(option(env, "log_decisions"), "log_decisions", false, w);
   c.readTranscript = parseBool(option(env, "read_transcript"), "read_transcript", false, w);
   c.worktreeGuard = parseBool(option(env, "worktree_guard"), "worktree_guard", true, w);
+  c.bashGuard = parseBool(option(env, "bash_guard"), "bash_guard", true, w);
+  c.isolateWorktrees = parseBool(option(env, "isolate_worktrees"), "isolate_worktrees", false, w);
   if (untrusted.length) applyRepoEnv(c, repoEnv, join(sessionRoot, ".claude", "settings.json"));
   const file = findRepoFile(sessionRoot);
   if (file) {
@@ -179,6 +192,8 @@ function applyRepoEnv(c, repoEnv, file) {
     if (optionName === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
     else if (optionName === "allow_ignored" && raw === "false") c.allowIgnored = false;
     else if (optionName === "worktree_guard" && raw === "true") c.worktreeGuard = true;
+    else if (optionName === "isolate_worktrees" && raw === "true") c.isolateWorktrees = true;
+    else if (optionName === "bash_guard" && raw === "true") c.bashGuard = true;
     else w.push(`${where} sets ${optionPrefix}${optionName.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
   }
 }

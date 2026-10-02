@@ -81,13 +81,20 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
 
   const targetRepo = git.commonDir(r.dir);
   if (!targetRepo) return pass("non-git-target");
-  if (targetRepo === s.repo) return pass("same-repo");
+  let why = "cross-repo";
+  if (targetRepo === s.repo) {
+    if (!config.isolateWorktrees) return pass("same-repo");
+    const ownTop = git.toplevel(s.root);
+    const mainTop = git.mainRoot ? git.mainRoot(s.root) : "";
+    if (!mainTop || ownTop === mainTop || git.toplevel(r.dir) === ownTop) return pass("same-repo");
+    why = "other-worktree";
+  }
 
   const allowance = matchAllowance(r.resolved, { env, input, config, sessionRoot: s.root, git });
   if (allowance) return pass(`allowance:${allowance}`);
 
   const sessionTop = git.toplevel(s.root);
-  if ((config.hubRepos || []).some((h) => resolveDir(h) === sessionTop)) {
+  if (why === "cross-repo" && (config.hubRepos || []).some((h) => resolveDir(h) === sessionTop)) {
     const targetTop = git.toplevel(r.dir);
     const rel = targetTop ? relative(sessionTop, targetTop) : "";
     const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
@@ -101,7 +108,7 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
 
   return {
     action: "cross",
-    why: "cross-repo",
+    why,
     target,
     resolved: r.resolved,
     targetRepo,
