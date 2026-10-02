@@ -117,3 +117,20 @@ export function renderError(error, input) {
   const msg = error && error.message ? error.message : String(error);
   return askOrDeny(input, `${pluginName} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);
 }
+
+export function worktreeReason(v) {
+  if (v.why === "worktree-unresolved") {
+    return `${pluginName}: this command runs \`git worktree add\`, and ${pluginName} could not resolve ${v.detail}, so it cannot tell where the worktree lands. Worktrees belong under the repository's \`.claude/worktrees/\`. Approve only if you expected this worktree.`;
+  }
+  if (v.why === "worktree-nested") {
+    return `${pluginName}: this command runs \`git worktree add\` for \`${v.target}\`, inside the existing worktree \`${v.host}\`. Nested worktrees end up inside each other's checkouts; put it directly under \`${v.worktreesDir}\`. Approve only if you want it nested there.`;
+  }
+  return `${pluginName}: this command runs \`git worktree add\` for \`${v.target}\`, outside \`${v.worktreesDir}\`. A worktree elsewhere (a /tmp folder above all) is easy to lose: the folder goes away and a stale worktree record stays behind. Prefer the Agent tool's isolation "worktree" or EnterWorktree, which place worktrees under \`${v.worktreesDir}\`, or stay in this checkout and use a scratch directory. Approve only if you want a worktree at that path.`;
+}
+
+export function renderWorktree(v, { mode, input, warnings = [] } = {}) {
+  if (!v || v.action !== "cross" || mode === "off") return null;
+  const reason = withWarnings(worktreeReason(v), warnings);
+  if (mode === "warn") return { systemMessage: `${pluginName} (warn mode): ${reason}` };
+  return askOrDeny(input, reason);
+}

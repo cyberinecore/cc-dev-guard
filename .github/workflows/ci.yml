@@ -36,3 +36,4 @@ jobs:
         run: |
           claude plugin validate . --strict
           claude plugin validate .claude-plugin/plugin.json --strict
+          claude plugin validate plugins/cyberine-worktree --strict

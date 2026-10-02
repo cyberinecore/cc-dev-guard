@@ -2,6 +2,12 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.2.0] - 2026-10-02
+
+- Bash `git worktree add` for a path outside the repository's `.claude/worktrees/`, or nested inside an existing worktree, now asks (deny under bypassPermissions). Option `worktree_guard`, default on; a repository file can only turn it on (D25).
+- New `/cyberine-devguard:worktrees` and `devguard.mjs worktrees [dir...] [--no-gh]`: a report of prunable, stray and merged worktrees per repository that changes nothing (D27).
+- New companion plugin `cyberine-worktree` 0.1.0 in the same marketplace: a `WorktreeCreate` hook that places every agent and `EnterWorktree` worktree at `<main repository>/.claude/worktrees/<name>` on branch `worktree/<name>`, based on the session's `HEAD` (D26).
+
 ## [0.1.12] - 2026-09-29
 
 - `autoMemoryDirectory` set in the session repository's `.claude/settings.local.json` is now an allowance when git ignores that file (D24). A tracked local settings file and the project `.claude/settings.json` are still not trusted.

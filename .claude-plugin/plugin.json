@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.1.12",
-  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given, plus status and explain skills.",
+  "version": "0.2.0",
+  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit or NotebookEdit touch a file in another git repository that the session was not given, and before a Bash git worktree add lands outside the repository's .claude/worktrees/, plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
     "email": "xinchao@nghia-pham.com"
@@ -60,6 +60,12 @@
       "title": "Read allowed directories from the transcript",
       "description": "Read the environment snapshot that Claude Code writes into the session transcript, which also reflects directories removed during the session. Off by default: Cyberine DevGuard then takes allowed directories from settings, /add-dir and --add-dir, and never opens the transcript.",
       "default": false
+    },
+    "worktree_guard": {
+      "type": "boolean",
+      "title": "Guard git worktree add",
+      "description": "Ask before a Bash command runs git worktree add for a path outside the repository's .claude/worktrees/ (for example a /tmp folder). Best effort: it reads the command text, so a script or a variable can hide the path.",
+      "default": true
     }
   }
 }

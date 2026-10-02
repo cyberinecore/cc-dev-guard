@@ -10,7 +10,9 @@ const version = VERSION;
 import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
-import { render, renderError } from "./output.mjs";
+import { judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
+import { render, renderError, renderWorktree } from "./output.mjs";
+import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 
 const usage = `usage: ${pluginName} <command>
@@ -20,6 +22,9 @@ const usage = `usage: ${pluginName} <command>
   session-start             warn when node is too old and prune old session records (used by hooks/hooks.json)
   explain <path> [options]  show the verdict for a write to <path>
   status [options]          show the session repository, allowed directories and configuration
+  worktrees [dir...] [--no-gh]
+                            report stray, prunable and merged git worktrees of each repository at or
+                            under <dir> (default: the current directory); changes nothing
   --version                 print the version
 
 options:
@@ -62,6 +67,7 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
       return renderError(new Error("the hook input is not valid JSON"));
     }
     if (!input || typeof input !== "object" || Array.isArray(input)) return renderError(new Error("the hook input is not a JSON object"));
+    if (input.tool_name === "Bash") return bashHook(input, env, deps);
     const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
     const config = loadConfig({ env, sessionRoot });
     if (config.mode === "off") return null;
@@ -74,11 +80,24 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
   }
 }
 
+function bashHook(input, env, deps) {
+  const command = input.tool_input?.command;
+  if (!mentionsWorktree(command)) return null;
+  const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
+  const config = loadConfig({ env, sessionRoot });
+  if (config.mode === "off" || !config.worktreeGuard) return null;
+  const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : sessionRoot;
+  const verdict = judgeWorktreeAdds(command, { cwd, home: env.HOME || env.USERPROFILE || "", git: deps.git || makeGit() });
+  return renderWorktree(verdict, { mode: config.mode, input, warnings: config.warnings });
+}
+
 function parseArgs(args) {
   const opts = { positional: [] };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (a === "--root" || a === "--cwd" || a === "--transcript") {
+    if (a === "--no-gh") {
+      opts.noGh = true;
+    } else if (a === "--root" || a === "--cwd" || a === "--transcript") {
       if (i + 1 >= args.length) throw new Error(`${a} needs a value`);
       opts[a.slice(2)] = args[++i];
     } else if (a.startsWith("--")) {
@@ -156,6 +175,15 @@ function explain(opts, env) {
   return lines.join("\n");
 }
 
+function worktreesReport(opts) {
+  const git = makeGit();
+  const gh = opts.noGh ? null : makeGh();
+  const dirs = opts.positional.length ? opts.positional.map((d) => resolve(d)) : [process.cwd()];
+  const repos = [...new Set(dirs.flatMap((d) => findRepos(d, git)))];
+  if (!repos.length) return "no git repository found at or under " + dirs.join(", ");
+  return formatScan(repos.map((r) => scanRepo(r, { git, gh })), { gh: !!gh });
+}
+
 export async function main(argv, { env = namedEnv(process.env), stdout = process.stdout, stderr = process.stderr } = {}) {
   const [cmd, ...rest] = argv;
   try {
@@ -188,6 +216,10 @@ export async function main(argv, { env = namedEnv(process.env), stdout = process
     }
     if (cmd === "status") {
       stdout.write(describeSession(parseArgs(rest), env).lines.join("\n") + "\n");
+      return 0;
+    }
+    if (cmd === "worktrees") {
+      stdout.write(worktreesReport(parseArgs(rest)) + "\n");
       return 0;
     }
     if (cmd === "--version" || cmd === "version") {

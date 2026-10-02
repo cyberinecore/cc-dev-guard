@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin.json",
+  "name": "cyberine-worktree",
+  "displayName": "Cyberine Worktree",
+  "version": "0.1.0",
+  "description": "WorktreeCreate hook for Claude Code: every agent or EnterWorktree worktree goes to <main repository>/.claude/worktrees/<name> on branch worktree/<name>, based on the spawning session's HEAD, and a nested spawn from a linked worktree still lands under the main repository. Replaces Claude Code's own worktree creation while installed.",
+  "author": {
+    "name": "Nia D Pham",
+    "email": "xinchao@nghia-pham.com"
+  },
+  "homepage": "https://github.com/cyberinecore/cc-dev-guard",
+  "repository": "https://github.com/cyberinecore/cc-dev-guard",
+  "license": "MIT",
+  "keywords": [
+    "git",
+    "worktree",
+    "hooks",
+    "agents"
+  ]
+}

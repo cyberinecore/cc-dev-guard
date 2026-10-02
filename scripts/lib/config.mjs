@@ -16,6 +16,7 @@ export function defaultConfig() {
     allowIgnored: true,
     logDecisions: false,
     readTranscript: false,
+    worktreeGuard: true,
     protect: [],
     repoFile: null,
     warnings: [],
@@ -33,7 +34,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -127,6 +128,10 @@ function applyRepoFile(c, file) {
         if (rel === "" || rel.startsWith("..") || isAbsolute(rel)) w.push(`${where} protect entry "${p}" leaves the repository; ignored`);
         else c.protect.push(abs.endsWith(sep) ? abs.slice(0, -1) : abs);
       }
+    } else if (optionName === "worktreeGuard") {
+      if (value === true) c.worktreeGuard = true;
+      else if (value === false) w.push(`${where} worktreeGuard false is ignored: a repository file can only make the guard stricter`);
+      else w.push(`${where} worktreeGuard must be true or false; ignored`);
     } else if (WIDENING_KEYS.has(optionName)) {
       w.push(`${where} ${optionName} is ignored: a repository file cannot widen what the session may write`);
     } else {
@@ -157,6 +162,7 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
   c.logDecisions = parseBool(option(env, "log_decisions"), "log_decisions", false, w);
   c.readTranscript = parseBool(option(env, "read_transcript"), "read_transcript", false, w);
+  c.worktreeGuard = parseBool(option(env, "worktree_guard"), "worktree_guard", true, w);
   if (untrusted.length) applyRepoEnv(c, repoEnv, join(sessionRoot, ".claude", "settings.json"));
   const file = findRepoFile(sessionRoot);
   if (file) {
@@ -172,6 +178,7 @@ function applyRepoEnv(c, repoEnv, file) {
   for (const [optionName, raw] of Object.entries(repoEnv)) {
     if (optionName === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
     else if (optionName === "allow_ignored" && raw === "false") c.allowIgnored = false;
+    else if (optionName === "worktree_guard" && raw === "true") c.worktreeGuard = true;
     else w.push(`${where} sets ${optionPrefix}${optionName.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
   }
 }

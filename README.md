@@ -4,6 +4,8 @@
 
 A Claude Code plugin that keeps a session inside its own repository. When Claude is about to Write, Edit or NotebookEdit a file in a different git repository that the session was not given, Cyberine DevGuard stops and asks you first. Writes inside the session's repository and its worktrees, its allowed directories (`--add-dir`, `/add-dir`, `permissions.additionalDirectories`), paths the other repository gitignores, non-git directories, and Claude Code's own memory and plan folders pass without a prompt.
 
+It also keeps git worktrees where you can find them. A Bash `git worktree add` aimed outside the repository's `.claude/worktrees/` (a `/tmp` folder that later vanishes and leaves a stale record behind, a sibling directory) asks first, `/cyberine-devguard:worktrees` reports the stray, prunable and merged worktrees you already have, and the optional companion plugin `cyberine-worktree` routes every worktree Claude Code creates to `<main repository>/.claude/worktrees/<name>`.
+
 It exists because an agent that `cd`s into a neighbouring checkout, follows a symlink, or resolves `../other-repo/file` can edit a project nobody asked it to touch, and the permission prompt does not say "this is a different repository".
 
 ## Install
@@ -20,6 +22,12 @@ From a shell:
 ```bash
 claude plugin marketplace add cyberinecore/cc-dev-guard
 claude plugin install cyberine-devguard@cyberine-devguard
+```
+
+One line, both plugins (the second is optional, see [Worktrees](#worktrees)):
+
+```bash
+claude plugin marketplace add cyberinecore/cc-dev-guard && claude plugin install cyberine-devguard@cyberine-devguard && claude plugin install cyberine-worktree@cyberine-devguard
 ```
 
 Cyberine DevGuard needs Claude Code 2.1.219 or later and Node.js 18 or later on the `PATH` that Claude Code runs hooks with. It has no dependencies and installs nothing. Older Claude Code lacks what the plugin relies on: exec-form hooks (2.1.139) and the `DirectoryAdded` hook event (2.1.219); on such a version the guard does not run.
@@ -61,6 +69,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts) |
 | `allow_ignored` | `true` | let writes to paths the other repository gitignores pass |
 | `log_decisions` | `false` | append each crossing (time, session id, tool, path, verdict) to `decisions.jsonl` in the plugin data directory |
+| `worktree_guard` | `true` | ask before a Bash `git worktree add` whose path lies outside the repository's `.claude/worktrees/` |
 | `read_transcript` | `false` | take the allowed directories from the environment snapshot in the session transcript instead of settings, `/add-dir` and `--add-dir`; the only setting that makes Cyberine DevGuard open the transcript |
 
 A repository can add `.claude/cyberine-devguard.json`, which may only make the guard stricter:
@@ -75,18 +84,34 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 
 - `mode` can only be raised (`off` < `warn` < `deny-once` < `ask`), never set to `off`.
 - `allowIgnored` can only be turned off.
+- `worktreeGuard` can only be turned on.
 - `protect` lists paths relative to the repository; writes under them ask.
 - Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its committed `.claude/settings.json`.
+
+## Worktrees
+
+Agents tend to create extra git worktrees in scratch folders. When the folder goes, the worktree record stays, and a repository collects dozens of entries that point at nothing. Cyberine DevGuard handles this in three parts; nothing is banned, and nothing is ever deleted for you.
+
+- **Bash guard** (in `cyberine-devguard`, option `worktree_guard`, default on). Before a Bash command runs `git worktree add`, the hook reads the target path, following `git -C <dir>`, an earlier `cd` in the same command, and `~`. A path directly under the repository's main `.claude/worktrees/` passes. A path anywhere else asks, and so does one nested inside an existing worktree there, or one built from a variable. The ask points the agent at the Agent tool's `isolation: "worktree"` or `EnterWorktree`, or tells it to stay in the checkout and use a scratch directory. Like every Cyberine DevGuard ask, it becomes a deny under bypassPermissions. This is a guardrail, not a boundary: it reads the command text, so a script, an alias, `sh -c` or `eval` can hide the call. The matcher adds about 10 ms to each Bash call, and a command that does not contain `worktree` returns before any git call.
+- **Report** (`/cyberine-devguard:worktrees [dir]`, or `node <plugin dir>/scripts/devguard.mjs worktrees [dir...] [--no-gh]`). For each repository at or up to three levels under the directory, it lists worktrees whose directory is gone (prunable), worktrees outside `.claude/worktrees/`, and worktrees whose branch is merged. Merged branches are looked up with `gh pr view <branch> --json state,mergedAt,number` under your active `gh` account, because an ancestry check misses squash merges. Without `gh`, or with `--no-gh`, a branch counts only when the default branch already contains it, and such a branch is labelled "merged or empty". The report prints the cleanup commands and runs none of them.
+- **Placement** (separate plugin `cyberine-worktree`, opt-in by installing it). A `WorktreeCreate` hook creates every worktree for the Agent tool's `isolation: "worktree"` and for `EnterWorktree`. Each goes to `<main repository>/.claude/worktrees/<name>` on branch `worktree/<name>`, with `git worktree add --no-track -B`, based on the spawning session's `HEAD`. The main repository is resolved even from inside a linked worktree, so a subagent spawned from a worktree lands beside it, not inside it. A submodule session keeps its worktrees under the submodule. Re-running for an existing worktree prints its path again. It is a separate plugin because Claude Code hands worktree creation entirely to such a hook: the hook cannot fall back to the built-in behaviour, which means `worktreeBaseRef` and the built-in branch naming no longer apply while it is installed.
+
+```bash
+claude plugin install cyberine-worktree@cyberine-devguard
+```
+
+Disable any other `WorktreeCreate` hook first: Claude Code runs every `WorktreeCreate` hook in parallel, and a second hook that picks a different path or branch leaves an orphan worktree. On Claude Code 2.1.287, `claude --worktree <name>` at launch still uses the built-in creation (branch `worktree-<name>`), because plugin hooks load after that worktree is made; a `WorktreeCreate` hook in `settings.json` does run there.
 
 ## Commands
 
 - `/cyberine-devguard:status [path]` prints the session repository, the allowed directories, the effective configuration and, for a path, the verdict and why.
+- `/cyberine-devguard:worktrees [dir]` reports stray, prunable and merged git worktrees and changes nothing.
 - `/cyberine-devguard:help` explains the modes and settings.
 - Outside Claude Code: `node <plugin dir>/scripts/devguard.mjs explain <path> --root <session dir>`.
 
 ## Limits
 
-- Only the file tools are guarded. Writes made through Bash (`echo >`, `sed -i`, `cp`, `git -C`), MCP tools, or commands you type with `!` are not seen. Neither are writes by another plugin's hooks module (Claude Mods), and such a module runs before Cyberine DevGuard and can overrule it.
+- Only the file tools are guarded, plus `git worktree add` in Bash (best effort, see [Worktrees](#worktrees)). Other writes made through Bash (`echo >`, `sed -i`, `cp`, `git -C`), MCP tools, or commands you type with `!` are not seen. Neither are writes by another plugin's hooks module (Claude Mods), and such a module runs before Cyberine DevGuard and can overrule it.
 - Without `read_transcript`, a directory removed from the session during the session stays allowed until the session ends (settings edits apply at once), and `--add-dir` paths containing spaces are not recognized on macOS, where only `ps` output is available. With `read_transcript`, a directory added in the same step as a write is seen from the next step (the snapshot is written after the next tool result).
 - After `/cd`, the session repository stays the one the session started in.
 - A repository you trust can switch Cyberine DevGuard off: Claude Code passes the `env` block of a project's `.claude/settings.json` to hook processes, so a `PATH` without node or a `NODE_OPTIONS` preload stops the hook, and a committed `permissions.additionalDirectories` widens the allowed list. That is Claude Code's workspace-trust boundary; review a repository's `.claude/` before you trust it.
@@ -102,7 +127,7 @@ Hooks run in Claude Code and Cowork; the claude.ai chat surface ignores hooks, s
 
 ## Network and data
 
-- Cyberine DevGuard makes no network requests and sends nothing anywhere. See `PRIVACY.md`.
+- The hooks make no network requests and send nothing anywhere. See `PRIVACY.md`. The one exception is the worktree report you run yourself: it calls your installed `gh` to look up pull requests for worktree branches, and `--no-gh` turns that off. `gh` runs with only `PATH`, home, temp and gh config-directory variables.
 - It does not read your conversation. With the default settings it never opens the session transcript; with `read_transcript` on it parses only the environment snapshot line (working directory and allowed directories) and keeps nothing else.
 - It reads, on your machine: the hook event Claude Code passes on stdin, `permissions.additionalDirectories` and `autoMemoryDirectory` from Claude Code settings files, the `env` keys for Cyberine DevGuard's own options in the session repository's `.claude/settings.json`, `.claude/cyberine-devguard.json` files at or above the session directory, the command line of the running `claude` process (`/proc/<pid>/cmdline` or `ps`, only for `--add-dir`) and its start directory (`~/.claude/sessions/<pid>.json`), and git metadata through `git rev-parse`, `git check-ignore` and `git ls-files`. Git runs without a shell, with `GIT_*` variables removed and `core.fsmonitor` disabled.
 - It writes only inside its plugin data directory (`~/.claude/plugins/data/<id>/`): `sessions/<session id>.json` (the directories added with `/add-dir` in that session, pruned after 7 days), `markers/` (empty files, `deny-once` mode only, pruned after 10 minutes) and, when `log_decisions` is on, `decisions.jsonl` (time, session id, tool, file path, verdict). Without a data directory, `deny-once` markers go to the system temp directory. Claude Code deletes the data directory when the plugin is uninstalled.
@@ -111,13 +136,15 @@ Hooks run in Claude Code and Cowork; the claude.ai chat surface ignores hooks, s
 
 ## Uninstall or migrate
 
-- Uninstall: `claude plugin uninstall cyberine-devguard@cyberine-devguard` (add `--keep-data` to keep the decision log), then `claude plugin marketplace remove cyberine-devguard`.
+- Uninstall: `claude plugin uninstall cyberine-worktree@cyberine-devguard` if installed, `claude plugin uninstall cyberine-devguard@cyberine-devguard` (add `--keep-data` to keep the decision log), then `claude plugin marketplace remove cyberine-devguard`.
 - Disable for a while: `claude plugin disable cyberine-devguard@cyberine-devguard`, or set `mode` to `off`.
 - Coming from a PreToolUse hook of your own that does the same job: install Cyberine DevGuard, confirm a crossing asks (`/cyberine-devguard:status <path in another repo>`), then remove your own hook entry from `settings.json`. While both are wired, Claude Code takes the stricter answer (measured: a second hook's deny beats Cyberine DevGuard's ask, `docs/LIVE-MATRIX.md`), so there is no unguarded window.
 
+- Coming from a `WorktreeCreate` hook of your own: install `cyberine-worktree`, then remove your own `WorktreeCreate` entry from `settings.json` right away, since both run in parallel.
+
 ## Development
 
-`npm test` runs the unit suite (real git repositories in temp dirs). `tests/live/matrix.sh` and `tests/live/failures.sh` drive real `claude -p` sessions and spend model quota; `node tests/live/latency.mjs` measures per-call cost. Design decisions and their evidence are in `docs/DECISIONS.md`, the adversarial review in `docs/SECURITY-REVIEW.md`.
+`npm test` runs the unit suite (real git repositories in temp dirs). `tests/live/matrix.sh`, `tests/live/failures.sh` and `tests/live/worktrees.sh` drive real `claude -p` sessions and spend model quota; `node tests/live/latency.mjs` measures per-call cost. Design decisions and their evidence are in `docs/DECISIONS.md`, the adversarial review in `docs/SECURITY-REVIEW.md`.
 
 ## License
 

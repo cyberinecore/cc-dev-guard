@@ -34,3 +34,24 @@ Before the bypass fix (first run, same day), an `ask` under `bypassPermissions` 
 Re-run on 2.1.287 (Claude Code), model haiku, 2026-10-01T18:50Z: every row's "target written" matched the table above. The same day a copy of the plugin with the bypass conversion removed answered a raw `ask` under `--dangerously-skip-permissions` for a Write into repository `b`: `.claude/x.md`, `.git/x.sample` and `.vscode/x.json` were written, `plain.txt` and `.dotfile` were not. A second run wrote `.bashrc`, `.gitmodules`, `.mcp.json`, `.ripgreprc`, `.idea/x.xml`, `.husky/pre-commit` and `.devcontainer/x.json`, and held `.env` and `.gitignore`: the safety-check path is a fixed list of names in the 2.1.287 binary (folders `.git`, `.vscode`, `.idea`, `.claude`, `.husky`, `.cargo`, `.devcontainer`, `.yarn`, `.mvn`; files `.gitconfig`, `.gitmodules`, `.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`, `.ripgreprc`, `.mcp.json`), not every dotfile. The deny conversion is still needed on 2.1.287.
 
 Two hooks answering the same write (measured the same day, `acceptEdits`): devguard answered `ask` and a second test plugin answered `deny`; the tool result was the deny and the write did not run.
+
+## Worktree rows
+
+`tests/live/worktrees.sh`: headless `claude -p --setting-sources project` runs in throwaway repositories (`plain`, a submodule `outer/sub`, and `nest` with a linked worktree `nest/.claude/worktrees/parent`). Rows with cyberine-worktree load `--plugin-dir plugins/cyberine-worktree`; Bash rows load devguard. The result column lists the linked worktrees after the run as `path [branch]`.
+
+2.1.287 (Claude Code), model haiku, 2026-10-02T03:28Z
+
+| row | setup | result |
+|---|---|---|
+| cli-w-plain | `-w probe` in plain, cyberine-worktree | `plain/.claude/worktrees/probe [worktree-probe]`: built-in creation, the plugin hook did not run at launch |
+| cli-w-submodule | `-w subprobe` in outer/sub, cyberine-worktree | `outer/sub/.claude/worktrees/subprobe [worktree-subprobe]`: built-in creation, as above |
+| agent-isolation | Agent `isolation: "worktree"` in plain, cyberine-worktree | `plain/.claude/worktrees/agent-<id> [worktree/agent-<id>]` |
+| agent-isolation-nested | Agent `isolation: "worktree"` from `nest/.claude/worktrees/parent`, cyberine-worktree | `nest/.claude/worktrees/agent-<id> [worktree/agent-<id>]` beside `parent`, not inside it |
+| enter-worktree | `EnterWorktree name=entered` in plain, cyberine-worktree | `plain/.claude/worktrees/entered [worktree/entered]` |
+| bash-tmp-control | `git worktree add <fixture>/tmp-control`, no plugin (positive control) | `tmp-control [tmp-control]`: created |
+| bash-tmp | `git worktree add /tmp/...`, devguard, bypass | none; tool result "cyberine-devguard: this command runs `git worktree add` for `/tmp/...`, outside `.../plain/.claude/worktrees`" |
+| bash-sibling | `git -C plain worktree add ../sibling`, devguard, bypass | none; same reason for `<fixture>/sibling` |
+| bash-inside | `git worktree add .claude/worktrees/ok`, devguard, bypass | `plain/.claude/worktrees/ok [ok]`: passes |
+| bash-tmp-acceptEdits | `git worktree add <fixture>/tmp-ae`, devguard, `acceptEdits` and `--allowedTools "Bash(git worktree add:*)"` | none; the ask held although the command was pre-allowed |
+
+A plugin `WorktreeCreate` hook is not loaded yet when `claude --worktree` creates its worktree at launch; a hook in `--settings` is (measured the same day by the owner's `~/.claude` session, which also measured that two `WorktreeCreate` hooks run in parallel and that an empty stdout fails creation). A first run of the Bash rows the same day is discarded: the prompt ended in "CMD ." and the model passed the dot to git as a commit-ish.
