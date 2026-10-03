@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.3.0",
-  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, and before a Bash git worktree add lands outside .claude/worktrees/, plus status, explain and worktree report skills.",
+  "version": "0.4.0",
+  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
     "email": "xinchao@nghia-pham.com"
@@ -78,6 +78,31 @@
       "title": "Guard obvious Bash writes",
       "description": "Read each Bash command for obvious write shapes (> and >> redirects, tee, sed -i, cp, mv, install, ln, rsync, touch, mkdir, rm, rmdir, truncate, dd of=, and git commands that change a repository) and treat each target like a file-tool write. Best effort: a script, an alias, a variable or eval can hide a write.",
       "default": true
+    },
+    "danger_guard": {
+      "type": "boolean",
+      "title": "Deny data-destroying Bash commands",
+      "description": "Deny, in every permission mode including bypassPermissions, Bash commands that destroy data or rewrite shared history: recursive rm outside temp, worktree and build folders, git reset --hard, git checkout -- ., git restore ., git clean -f, a force-push to a protected branch or with no branch named, terraform destroy, kubectl delete of a namespace, volume or --all, docker system prune, docker volume rm/prune, docker compose down -v, DROP DATABASE/SCHEMA/TABLE and TRUNCATE. Also inside ssh, bash -c and other wrappers. Start a session with CYBERINE_DEVGUARD_ALLOW_DANGER=1 to lift it for that session.",
+      "default": true
+    },
+    "protected_branches": {
+      "type": "string",
+      "title": "Protected branches",
+      "description": "Branch names a force-push to is denied while danger_guard is on.",
+      "multiple": true,
+      "default": ["main", "master", "production", "prod", "development", "develop", "dev", "release", "staging"]
+    },
+    "deny_aws_s3_deletes": {
+      "type": "boolean",
+      "title": "Deny aws s3 deletes",
+      "description": "While danger_guard is on, also deny aws s3 rm, aws s3 rb and aws s3api delete-bucket/delete-object/delete-objects.",
+      "default": true
+    },
+    "allow_danger_env": {
+      "type": "string",
+      "title": "Extra escape variable",
+      "description": "Name of a second environment variable that, set to 1 when the session starts, lifts danger_guard for that session, in addition to CYBERINE_DEVGUARD_ALLOW_DANGER. A value set by a repository's .claude settings env block is ignored.",
+      "default": ""
     }
   }
 }

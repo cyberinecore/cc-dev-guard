@@ -76,3 +76,5 @@ A plugin `WorktreeCreate` hook is not loaded yet when `claude --worktree` create
 | wt-dup-warning | cyberine-worktree with a second `WorktreeCreate` hook in project settings | - | SessionStart `hook_response` carries "cyberine-worktree: another WorktreeCreate hook is configured (`/opt/other-wt.sh` in ...)" |
 
 Without `--add-dir b`, the filesystem server itself refused the control write ("Access denied - path outside allowed directories"): Claude Code hands the server its session directories as roots, so the server's own limit already covered that case. The devguard row shows the hook answering before the server is called.
+
+Danger guard (D34), 2.1.287, model haiku, 2026-10-03, `--setting-sources project,local` so no other hook reads Bash: under `--dangerously-skip-permissions` a request to run `git reset --hard HEAD` in a temp repository holding an uncommitted change was denied with the danger reason and the change survived; the same run started with `CYBERINE_DEVGUARD_ALLOW_DANGER=1` ran the command and the change was gone.

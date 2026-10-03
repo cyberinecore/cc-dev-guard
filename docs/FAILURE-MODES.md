@@ -15,4 +15,6 @@ What happens when devguard itself cannot run. Measured with `tests/live/failures
 | hook exits 2 | blocked | debug log: hook error with stderr |
 | hook exceeds its timeout | FAILS OPEN | debug log: `timed out after 2000ms` (probe used a 2 s timeout) |
 
+The same rows hold for the Bash hook and `danger_guard` (D34): an engine that fails to load answers ask, or deny under bypassPermissions, for every Bash call, so a broken install shows at once as every command being held; the fail-open rows let a data-destroying command run. Keep settings `deny` rules for commands you never want as a second layer outside bypassPermissions.
+
 The fail-open rows are Claude Code's contract for a hook that cannot answer, not something the plugin can change from inside. devguard keeps them rare: the entry file is small and only imports the engine, the engine has no dependencies, and the timeout is 15 s against a measured p95 of about 120 ms per call (40 runs, Node 22, Apple M-series; `node tests/live/latency.mjs`). `tests/failure.test.mjs` fails if the p95 of eight real hook runs exceeds 3 s or the configured timeout drops below twice that budget.

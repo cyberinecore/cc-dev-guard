@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { DEFAULT_MODE, MODES, OPTION_PREFIX, REPO_CONFIG_FILE } from "./constants.mjs";
+import { DEFAULT_PROTECTED_BRANCHES } from "./dangerguard.mjs";
 
 const defaultMode = DEFAULT_MODE;
 const modeList = MODES.join(", ");
@@ -19,6 +20,10 @@ export function defaultConfig() {
     worktreeGuard: true,
     isolateWorktrees: false,
     bashGuard: true,
+    dangerGuard: true,
+    protectedBranches: [...DEFAULT_PROTECTED_BRANCHES],
+    denyAwsS3Deletes: true,
+    allowDangerEnv: "",
     protect: [],
     repoFile: null,
     warnings: [],
@@ -36,7 +41,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -47,6 +52,17 @@ export function repoSetOptionKeys(sessionRoot) {
   } catch {
     return [];
   }
+}
+
+export function repoSetsEnv(sessionRoot, name) {
+  if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return false;
+  for (const file of ["settings.json", "settings.local.json"]) {
+    try {
+      const env = JSON.parse(readFileSync(join(sessionRoot, ".claude", file), "utf8"))?.env;
+      if (env && typeof env === "object" && Object.prototype.hasOwnProperty.call(env, name)) return true;
+    } catch {}
+  }
+  return false;
 }
 
 function option(env, optionName) {
@@ -70,6 +86,11 @@ function parseDirList(raw, optionName, warnings) {
     else warnings.push(`option ${optionName}: "${part}" is not an absolute path; ignored`);
   }
   return out;
+}
+
+export function parseNameList(raw) {
+  if (raw === undefined) return undefined;
+  return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 export function modeRank(mode) {
@@ -138,6 +159,19 @@ function applyRepoFile(c, file) {
       if (value === true) c.bashGuard = true;
       else if (value === false) w.push(`${where} bashGuard false is ignored: a repository file can only make the guard stricter`);
       else w.push(`${where} bashGuard must be true or false; ignored`);
+    } else if (optionName === "dangerGuard") {
+      if (value === true) c.dangerGuard = true;
+      else if (value === false) w.push(`${where} dangerGuard false is ignored: a repository file can only make the guard stricter`);
+      else w.push(`${where} dangerGuard must be true or false; ignored`);
+    } else if (optionName === "denyAwsS3Deletes") {
+      if (value === true) c.denyAwsS3Deletes = true;
+      else if (value === false) w.push(`${where} denyAwsS3Deletes false is ignored: a repository file can only make the guard stricter`);
+      else w.push(`${where} denyAwsS3Deletes must be true or false; ignored`);
+    } else if (optionName === "protectedBranches") {
+      if (!Array.isArray(value) || value.some((b) => typeof b !== "string" || b.trim() === "")) w.push(`${where} protectedBranches must be a list of branch names; ignored`);
+      else for (const b of value) if (!c.protectedBranches.includes(b.trim())) c.protectedBranches.push(b.trim());
+    } else if (optionName === "allowDangerEnv") {
+      w.push(`${where} allowDangerEnv is ignored: a repository file cannot name an escape hatch`);
     } else if (optionName === "isolateWorktrees") {
       if (value === true) c.isolateWorktrees = true;
       else if (value === false) {
@@ -176,6 +210,15 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.worktreeGuard = parseBool(option(env, "worktree_guard"), "worktree_guard", true, w);
   c.bashGuard = parseBool(option(env, "bash_guard"), "bash_guard", true, w);
   c.isolateWorktrees = parseBool(option(env, "isolate_worktrees"), "isolate_worktrees", false, w);
+  c.dangerGuard = parseBool(option(env, "danger_guard"), "danger_guard", true, w);
+  c.denyAwsS3Deletes = parseBool(option(env, "deny_aws_s3_deletes"), "deny_aws_s3_deletes", true, w);
+  const branches = parseNameList(option(env, "protected_branches"));
+  if (branches !== undefined) c.protectedBranches = branches;
+  const escapeName = option(env, "allow_danger_env");
+  if (escapeName) {
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(escapeName)) c.allowDangerEnv = escapeName;
+    else w.push(`option allow_danger_env: "${escapeName}" is not an environment variable name; ignored`);
+  }
   if (untrusted.length) applyRepoEnv(c, repoEnv, join(sessionRoot, ".claude", "settings.json"));
   const file = findRepoFile(sessionRoot);
   if (file) {
@@ -194,6 +237,8 @@ function applyRepoEnv(c, repoEnv, file) {
     else if (optionName === "worktree_guard" && raw === "true") c.worktreeGuard = true;
     else if (optionName === "isolate_worktrees" && raw === "true") c.isolateWorktrees = true;
     else if (optionName === "bash_guard" && raw === "true") c.bashGuard = true;
+    else if (optionName === "danger_guard" && raw === "true") c.dangerGuard = true;
+    else if (optionName === "deny_aws_s3_deletes" && raw === "true") c.denyAwsS3Deletes = true;
     else w.push(`${where} sets ${optionPrefix}${optionName.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
   }
 }

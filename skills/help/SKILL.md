@@ -29,4 +29,6 @@ Worktrees: a Bash `git worktree add` outside the repository's `.claude/worktrees
 
 Bash and MCP: obvious Bash writes (redirects, `tee`, `sed -i`, `cp`/`mv`/`rsync` destinations, `touch`/`mkdir`/`rm`, git commands that change a repository) and the reference filesystem MCP server's write tools are judged like file-tool writes (option `bash_guard`, default on; best effort). `isolate_worktrees` (default off) makes the other worktrees of the session's repository count as outside it.
 
+Data-destroying Bash commands (recursive rm outside temp and build folders, `git reset --hard`, force-push to a protected branch, `terraform destroy`, `DROP TABLE` and similar) are denied in every permission mode (option `danger_guard`, default on; `protected_branches`, `deny_aws_s3_deletes`). Lift it for one session by starting it with `CYBERINE_DEVGUARD_ALLOW_DANGER=1`, or the variable named in `allow_danger_env`; a repository cannot lift it.
+
 Limits: writes hidden in scripts or `sh -c`, files written by a process Bash starts, other MCP servers, or commands you type with `!` are not seen. Without `read_transcript`, a directory removed during the session stays allowed until it ends. Cyberine DevGuard needs `node` on the PATH; without it, or when the hook times out, writes are not checked.

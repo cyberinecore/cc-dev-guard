@@ -72,6 +72,10 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `bash_guard` | `true` | read each Bash command for obvious writes (see [Bash and MCP writes](#bash-and-mcp-writes)) and treat each target like a file-tool write |
 | `isolate_worktrees` | `false` | ask before a session started in a linked worktree writes into the main checkout or another worktree of the same repository (file tools, Bash writes, MCP writes) |
 | `worktree_guard` | `true` | ask before a Bash `git worktree add` whose path lies outside the repository's `.claude/worktrees/` |
+| `danger_guard` | `true` | deny data-destroying Bash commands in every permission mode (see [Data-destroying commands](#data-destroying-commands)) |
+| `protected_branches` | `main`, `master`, `production`, `prod`, `development`, `develop`, `dev`, `release`, `staging` | branches a force-push to is denied |
+| `deny_aws_s3_deletes` | `true` | also deny `aws s3 rm`/`rb` and `aws s3api delete-*` |
+| `allow_danger_env` | none | name of a second variable that lifts `danger_guard` when set to `1`, besides `CYBERINE_DEVGUARD_ALLOW_DANGER` |
 | `read_transcript` | `false` | take the allowed directories from the environment snapshot in the session transcript instead of settings, `/add-dir` and `--add-dir`; the only setting that makes Cyberine DevGuard open the transcript |
 
 A repository can add `.claude/cyberine-devguard.json`, which may only make the guard stricter:
@@ -86,9 +90,10 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 
 - `mode` can only be raised (`off` < `warn` < `deny-once` < `ask`), never set to `off`.
 - `allowIgnored` can only be turned off.
-- `worktreeGuard`, `bashGuard` and `isolateWorktrees` can only be turned on.
+- `worktreeGuard`, `bashGuard`, `isolateWorktrees`, `dangerGuard` and `denyAwsS3Deletes` can only be turned on.
+- `protectedBranches` adds branch names to the user's list; it cannot remove one.
 - `protect` lists paths relative to the repository; writes under them ask.
-- Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its committed `.claude/settings.json`.
+- Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, `allowDangerEnv`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its committed `.claude/settings.json`.
 
 ## Bash and MCP writes
 
@@ -102,6 +107,23 @@ Write, Edit and NotebookEdit are not the only way an agent writes. With `bash_gu
 The parser follows quotes, `cd` within the command, subshells and heredocs (a heredoc body is data, not commands). A target built from a variable or command substitution is skipped rather than asked about, to keep the prompt for real crossings. This is best effort: a script, an alias, `sh -c`, `eval`, or a program that writes files on its own are not seen. A process started through Bash, such as another coding tool or a build script, writes wherever it likes.
 
 Write tools of the reference filesystem MCP server (`@modelcontextprotocol/server-filesystem`) are judged too: `write_file`, `edit_file` (not with `dryRun`), `create_directory`, and `move_file` (both the source and the destination). A tool is matched by its name and by that server's documented input schema, so a different server's tool with the same name but other arguments is left alone. Other MCP servers are not seen.
+
+## Data-destroying commands
+
+With `danger_guard` on (the default), a Bash command that destroys data or rewrites shared history is denied in every permission mode, `bypassPermissions` included, and whatever `mode` is set to. The reason tells Claude to hand the exact command to you instead of rephrasing it.
+
+- recursive `rm` (`-r`, `-R`, `--recursive`) of `/`, `~`, `.`, `..`, `*`, a `../` path, a target held in a shell variable, or any absolute or `~` path, except temp folders (`/tmp`, `/var/tmp`, the macOS `/var/folders/.../T/` folders, `$TMPDIR`, `$CLAUDE_JOB_DIR`, `~/.claude/jobs/`), `.claude/worktrees/` and regenerable folders (`node_modules`, `dist`, `build`, `.next`, `coverage`, `.venv` and similar); a path with a `..` segment is never a temp folder;
+- `git reset --hard`, `git checkout -- .`, `git restore .`, `git clean -f`;
+- a force-push (`--force`, `-f`, `+branch`) to a branch in `protected_branches`, or with no branch named; `--force-with-lease` to an unprotected branch passes;
+- `terraform destroy`, `kubectl delete` of a namespace, `pv`, `pvc` or `--all`, `docker system prune`, `docker volume rm`/`prune`, `docker compose down -v`;
+- `DROP DATABASE`/`SCHEMA`/`TABLE` and `TRUNCATE`, wherever they appear in the command;
+- with `deny_aws_s3_deletes` (default on), `aws s3 rm`/`rb` and `aws s3api delete-bucket`/`delete-object`/`delete-objects`.
+
+The same checks run on the quoted text handed to `ssh`, `bash -c`, `sh -c`, `eval`, `xargs`, `sudo`, `env`, `timeout`, `docker exec`, `kubectl exec` and `*.sh` wrappers, three levels deep. Text-only commands (`echo`, `grep`, `git log`, `git commit -m` messages and similar) and comment lines are not read, so mentioning a command does not trigger it.
+
+To run such a command, run it yourself, or start the session with `CYBERINE_DEVGUARD_ALLOW_DANGER=1` in its environment (or the variable you named in `allow_danger_env`). A value set through the `env` block of a repository's `.claude/settings.json` or `.claude/settings.local.json` is ignored, so a cloned repository cannot lift the guard. A repository file can turn the guard on and add protected branches, never turn it off.
+
+This is a pattern check on the command text, not a sandbox: a script file, an alias, or a program that deletes on its own is not seen. It is the one part of Cyberine DevGuard that denies outright, because `bypassPermissions` skips every prompt and settings `deny` rules are the only other gate.
 
 ## Worktrees
 
@@ -131,7 +153,7 @@ Disable any other `WorktreeCreate` hook first: Claude Code runs every `WorktreeC
 - Without `read_transcript`, a directory removed from the session during the session stays allowed until the session ends (settings edits apply at once), and `--add-dir` paths containing spaces are not recognized on macOS, where only `ps` output is available. With `read_transcript`, a directory added in the same step as a write is seen from the next step (the snapshot is written after the next tool result).
 - After `/cd`, the session repository stays the one the session started in.
 - A repository you trust can switch Cyberine DevGuard off: Claude Code passes the `env` block of a project's `.claude/settings.json` to hook processes, so a `PATH` without node or a `NODE_OPTIONS` preload stops the hook, and a committed `permissions.additionalDirectories` widens the allowed list. That is Claude Code's workspace-trust boundary; review a repository's `.claude/` before you trust it.
-- Fail-open cases, measured in `docs/FAILURE-MODES.md`: no `node` on the `PATH`, a missing or crashing entry script, output that is not JSON, and a hook that exceeds its 15 s timeout all let the write run. Cyberine DevGuard's SessionStart hook also runs `node`, so a missing node shows up at session start as a failed hook (`Executable not found in $PATH: "node"`), and a node older than 18 prints a notice. An internal error while deciding asks instead of failing open.
+- Fail-open cases, measured in `docs/FAILURE-MODES.md`, apply to `danger_guard` too: if the hook cannot run, a data-destroying command is not stopped. Pair it with settings `deny` rules for the commands you never want, which hold in every mode except `bypassPermissions`. Fail-open cases: no `node` on the `PATH`, a missing or crashing entry script, output that is not JSON, and a hook that exceeds its 15 s timeout all let the write run. Cyberine DevGuard's SessionStart hook also runs `node`, so a missing node shows up at session start as a failed hook (`Executable not found in $PATH: "node"`), and a node older than 18 prints a notice. An internal error while deciding asks instead of failing open.
 - A process that can already write to your session transcript or to Cyberine DevGuard's data directory can forge a grant; file-tool writes to both ask, Bash writes are not seen.
 - Paths are compared after resolving symlinks and case on the existing part; a case or Unicode variant of a directory that does not exist yet is treated as different (a false ask, never a false pass).
 

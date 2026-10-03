@@ -35,3 +35,11 @@
 22 of 27 cases agree.
 
 Every difference is devguard being stricter. Someone migrating from the Go hook who relied on its `~/.claude/memory` allowance or its hub overlay file sets `extra_allowed_dirs` or `hub_repos` instead.
+
+## Bash danger guard
+
+`node tests/live/parity-bashguard.mjs <nf-hooks binary>` feeds every case of the Go hook's table tests (`TestBashGuardDenies`, `TestBashGuardAllows` in `bashguard_test.go`, copied into `tests/fixtures/bashguard-cases.mjs` with the home directory written as `/Users/me` and replaced by the real home at run time) to `nf-hooks bash-guard` and to devguard as a Bash PreToolUse event under bypassPermissions, and compares whether each one is denied. The same cases run in `npm test` against `dangerReason` (`tests/dangerguard.test.mjs`). Run 2026-10-03 on macOS, Node v22.15.1, against a binary built from the Go source as of its commit 42e644aa, with the `isTmpPath` fix (macOS `/var/folders/.../T/`, no `..` segment):
+
+94 of 94 cases agree: 50 denied by both, 44 passed by both, none differing from the Go table.
+
+The deny reasons differ on purpose: devguard drops the personal pointers (`settings.json deny list`, the 2026-03-24 incident, `~/.claude/rules/safety.md`) and names `CYBERINE_DEVGUARD_ALLOW_DANGER` or the `allow_danger_env` variable as the escape.

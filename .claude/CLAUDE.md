@@ -12,12 +12,13 @@ Guidance for Claude Code working in this repository.
 - One test: `node --test --test-name-pattern "<name>" tests/<file>.test.mjs`
 - Validate the plugin: `claude plugin validate . --strict` and `claude plugin validate .claude-plugin/plugin.json --strict`. This file sits in `.claude/` because a root `CLAUDE.md` makes strict validation fail.
 - Explain a verdict: `node scripts/devguard.mjs explain <path> [--cwd <dir>] [--root <dir>] [--transcript <file>]`.
-- Live probes against the installed Claude Code: `tests/live/matrix.sh`, `tests/live/failures.sh` (spend model quota), `node tests/live/latency.mjs`, `node tests/live/parity.mjs <nf-hooks binary>`, `tests/live/worktrees.sh`, `tests/live/bash-mcp.sh`. Not part of `npm test`.
+- Live probes against the installed Claude Code: `tests/live/matrix.sh`, `tests/live/failures.sh` (spend model quota), `node tests/live/latency.mjs`, `node tests/live/parity.mjs <nf-hooks binary>`, `tests/live/worktrees.sh`, `tests/live/bash-mcp.sh`, `node tests/live/parity-bashguard.mjs <nf-hooks binary>`. Not part of `npm test`.
 
 ## Layout
 
 - `scripts/devguard.mjs`: entry, subcommands `hook`, `directory-added`, `session-start`, `explain`, `status`, `worktrees`. It only imports the engine, so an engine that fails to load still answers ask.
 - `scripts/lib/`: `decide.mjs` (pure decision), `transcript.mjs` (bounded tail reader), `config.mjs` (userConfig plus tightening-only repo file), `git.mjs` (git without a shell), `allowances.mjs` (Claude Code's own folders), `sources.mjs` (allowed dirs from settings, `/add-dir` records and `--add-dir`; the transcript is opt-in), `paths.mjs`, `output.mjs` (mode to hook JSON, ask becomes deny under bypassPermissions), `constants.mjs`.
+- `scripts/lib/dangerguard.mjs` (data-destroying Bash commands, denied in every mode, D34; a port of the Go `bash-guard`, cases in `tests/fixtures/bashguard-cases.mjs`).
 - `scripts/lib/bashguard.mjs` (Bash parsing: `git worktree add` D25, obvious write shapes D28), `scripts/lib/mcpfs.mjs` (filesystem MCP schemas, D29), `scripts/lib/worktrees.mjs` (the report-only `worktrees` command, D27).
 - `plugins/cyberine-worktree/`: the second, self-contained plugin (WorktreeCreate hook, D26). It may import only node builtins; it has its own version.
 - `hooks/hooks.json`: exec-form `node ${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs hook`, matchers `Write|Edit|NotebookEdit`, `Bash` and the filesystem MCP write tools, plus SessionStart `session-start` (surfaces a missing or old node, prunes records) and DirectoryAdded `directory-added` (records `/add-dir` per session).

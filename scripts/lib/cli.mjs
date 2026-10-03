@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync } from "
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { configDirOf } from "./allowances.mjs";
-import { loadConfig } from "./config.mjs";
+import { loadConfig, repoSetsEnv } from "./config.mjs";
 import { FALLBACK_MARKER_DIR, NAME, VERSION } from "./constants.mjs";
 
 const pluginName = NAME;
@@ -11,8 +11,9 @@ import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
 import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
+import { dangerReason, ESCAPE_ENV } from "./dangerguard.mjs";
 import { mcpWriteTargets } from "./mcpfs.mjs";
-import { render, renderError, renderWorktree } from "./output.mjs";
+import { render, renderDanger, renderError, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 
@@ -88,10 +89,12 @@ function bashHook(input, env, deps, now) {
   const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
   const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : sessionRoot;
   const home = env.HOME || env.USERPROFILE || "";
+  const config = loadConfig({ env, sessionRoot });
+  const danger = dangerCheck(command, { env, config, sessionRoot, home });
+  if (danger) return danger;
   const writes = findWrites(command, { cwd, home });
   const worktree = mentionsWorktree(command);
   if (!writes.length && !worktree) return null;
-  const config = loadConfig({ env, sessionRoot });
   if (config.mode === "off") return null;
   const git = deps.git || makeGit();
   if (worktree && config.worktreeGuard) {
@@ -109,6 +112,25 @@ function bashHook(input, env, deps, now) {
     if (out) return out;
   }
   return null;
+}
+
+function escapeOpen(env, config, sessionRoot) {
+  const warnings = [];
+  for (const name of [ESCAPE_ENV, config.allowDangerEnv].filter(Boolean)) {
+    if (env[name] !== "1") continue;
+    if (repoSetsEnv(sessionRoot, name)) warnings.push(`${name}=1 comes from the env block of the repository's .claude settings and is ignored: only the user can lift the danger guard`);
+    else return { open: true, warnings };
+  }
+  return { open: false, warnings };
+}
+
+function dangerCheck(command, { env, config, sessionRoot, home }) {
+  if (!config.dangerGuard) return null;
+  const reason = dangerReason(command, { home, protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes });
+  if (!reason) return null;
+  const escape = escapeOpen(env, config, sessionRoot);
+  if (escape.open) return null;
+  return renderDanger(reason, { escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings] });
 }
 
 function mcpHook(input, env, deps, now) {
@@ -191,6 +213,8 @@ function describeSession(opts, env) {
     `bash guard: ${config.bashGuard}`,
     `worktree guard: ${config.worktreeGuard}`,
     `isolate worktrees: ${config.isolateWorktrees}`,
+    `danger guard: ${config.dangerGuard}${config.dangerGuard ? ` (aws s3 deletes: ${config.denyAwsS3Deletes}; escape: ${[ESCAPE_ENV, config.allowDangerEnv].filter(Boolean).join(" or ")}=1)` : ""}`,
+    `protected branches: ${config.protectedBranches.join(", ") || "none"}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
     `repo config file: ${config.repoFile || "none"}`,

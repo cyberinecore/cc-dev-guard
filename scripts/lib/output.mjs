@@ -127,6 +127,14 @@ export function render(v, { mode, input, now = Date.now(), markerDir, warnings =
   }
 }
 
+export function dangerDenyReason(reason, escapeName) {
+  return `${pluginName}: ${reason} ${pluginName} denies this in every permission mode. Hand the exact command to the user to run themselves, or the user starts the session with ${escapeName}=1.`;
+}
+
+export function renderDanger(reason, { escapeName, warnings = [] } = {}) {
+  return decision("deny", withWarnings(dangerDenyReason(reason, escapeName), warnings));
+}
+
 export function renderError(error, input) {
   const msg = error && error.message ? error.message : String(error);
   return askOrDeny(input, `${pluginName} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);
