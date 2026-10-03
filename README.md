@@ -37,7 +37,7 @@ Cyberine DevGuard needs Claude Code 2.1.219 or later and Node.js 18 or later on 
 For every Write, Edit and NotebookEdit, for each obvious write in a Bash command, and for the write tools of the reference filesystem MCP server, the hook resolves the target path (following symlinks in the part that exists) and compares the target's git repository with the session's.
 
 - The session's repository is the one Claude Code was started in (`CLAUDE_PROJECT_DIR`). A later `cd` does not move it; a `--worktree` session counts its main checkout as the same repository. Every worktree of one repository is one scope unless you turn on `isolate_worktrees`.
-- The hook never answers `allow` and never approves a tool call: it either stays silent, so Claude Code's normal permission rules decide, or it answers `ask` (`deny` under `bypassPermissions` and in `deny-once` mode).
+- The hook never answers `allow` and never approves a tool call: it either stays silent, so Claude Code's normal permission rules decide, or it answers `ask` (`deny` in `deny-once` mode and under `bypassPermissions`, where a retry you asked for passes; see below).
 - Passes without a word: the same repository (worktrees included), a directory that is not inside any git repository, a path the other repository ignores (`allow_ignored`, default on), an allowed directory of the session, and Claude Code's own folders (`~/.claude/projects/*/memory/`, `~/.claude/plans/`, an `autoMemoryDirectory` from user settings or from a gitignored `.claude/settings.local.json`, the session scratchpad and a background job's `tmp/`).
 - Everything else is a crossing. What happens then depends on the mode. The reason names the fix: `/add-dir <directory>` for this session, or the `extra_allowed_dirs` option for every session.
 - Always asked about, even inside the session's repository: `.claude/cyberine-devguard.json`, Claude Code settings files (`.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings.json`), session transcripts, Cyberine DevGuard's own data directory, and paths a repository protects with `protect`. Each of these can widen what the session may write.
@@ -56,7 +56,7 @@ Set with the `mode` option (`/config`, or the plugin's configuration dialog).
 | `warn` | Never blocks; shows a notice. |
 | `off` | Does nothing. |
 
-Under `bypassPermissions` Cyberine DevGuard answers `deny` instead of `ask`. Measured on Claude Code 2.1.283 and 2.1.287: in that mode an `ask` for a path Claude Code treats as sensitive (folders such as `.claude/`, `.git/`, `.vscode/`, `.idea/`, `.husky/`, and files such as `.bashrc`, `.gitmodules`, `.mcp.json`) is handed to the permission pipeline and the write runs anyway. To allow a directory in such a session, add it with `/add-dir`. See `docs/LIVE-MATRIX.md` for every measured row.
+Under `bypassPermissions` no prompt reaches you, and Claude Code lets an `ask` through for paths it treats as sensitive (folders such as `.claude/`, `.git/`, `.vscode/`, `.idea/`, `.husky/`, and files such as `.bashrc`, `.gitmodules`, `.mcp.json`; measured on 2.1.283 and 2.1.287), so Cyberine DevGuard never answers `ask` there. A write to another repository is handled like `deny-once`: the first one per session and repository is denied with a note telling Claude to retry only if you named that target in this turn, and a retry within 10 minutes passes. So you can still say in chat "write the fix into ../other-repo" and Claude can do it. Turn on `bypass_strict` to deny every such write instead, as before 0.5.0. Writes to Cyberine DevGuard's own configuration, Claude Code settings files, transcripts and `protect` paths, a misplaced `git worktree add`, and data-destroying commands stay denied on every retry. To allow a directory for the whole session, add it with `/add-dir`. See `docs/LIVE-MATRIX.md` for every measured row.
 
 ## Configuration
 
@@ -75,6 +75,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `danger_guard` | `true` | deny data-destroying Bash commands in every permission mode (see [Data-destroying commands](#data-destroying-commands)) |
 | `protected_branches` | `main`, `master`, `production`, `prod`, `development`, `develop`, `dev`, `release`, `staging` | branches a force-push to is denied |
 | `deny_aws_s3_deletes` | `true` | also deny `aws s3 rm`/`rb` and `aws s3api delete-*` |
+| `bypass_strict` | `false` | under `bypassPermissions`, deny every write to another repository instead of letting a retry through |
 | `allow_danger_env` | none | name of a second variable that lifts `danger_guard` when set to `1`, besides `CY_ALLOW_DANGER` |
 | `read_transcript` | `false` | take the allowed directories from the environment snapshot in the session transcript instead of settings, `/add-dir` and `--add-dir`; the only setting that makes Cyberine DevGuard open the transcript |
 
@@ -90,7 +91,7 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 
 - `mode` can only be raised (`off` < `warn` < `deny-once` < `ask`), never set to `off`.
 - `allowIgnored` can only be turned off.
-- `worktreeGuard`, `bashGuard`, `isolateWorktrees`, `dangerGuard` and `denyAwsS3Deletes` can only be turned on.
+- `worktreeGuard`, `bashGuard`, `isolateWorktrees`, `dangerGuard`, `denyAwsS3Deletes` and `bypassStrict` can only be turned on.
 - `protectedBranches` adds branch names to the user's list; it cannot remove one.
 - `protect` lists paths relative to the repository; writes under them ask.
 - Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, `allowDangerEnv`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its committed `.claude/settings.json`.

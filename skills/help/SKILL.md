@@ -31,4 +31,6 @@ Bash and MCP: obvious Bash writes (redirects, `tee`, `sed -i`, `cp`/`mv`/`rsync`
 
 Data-destroying Bash commands (recursive rm outside temp and build folders, `git reset --hard`, force-push to a protected branch, `terraform destroy`, `DROP TABLE` and similar) are denied in every permission mode (option `danger_guard`, default on; `protected_branches`, `deny_aws_s3_deletes`). Lift it for one session by starting it with `CY_ALLOW_DANGER=1`, or the variable named in `allow_danger_env`; a repository cannot lift it.
 
+Under bypassPermissions a write to another repository is denied once per session and repository and a retry within 10 minutes passes, so the user can ask for it in chat; option `bypass_strict` (default off) denies every such write instead. Guard files, settings files, `protect` paths, misplaced worktrees and data-destroying commands stay denied.
+
 Limits: writes hidden in scripts or `sh -c`, files written by a process Bash starts, other MCP servers, or commands you type with `!` are not seen. Without `read_transcript`, a directory removed during the session stays allowed until it ends. Cyberine DevGuard needs `node` on the PATH; without it, or when the hook times out, writes are not checked.

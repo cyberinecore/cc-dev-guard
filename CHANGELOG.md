@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.5.0] - 2026-10-03
+
+- Under `bypassPermissions` a write to another repository is no longer a hard deny: the first one per session and repository is denied with a note telling Claude to retry only if the user named that target this turn, and a retry within 10 minutes passes, so the user can ask for a cross-repository change in chat. Guard files, settings files, transcripts, `protect` paths, misplaced worktrees and data-destroying commands stay denied. New option `bypass_strict` (default off) restores the hard deny; a repository file can only turn it on (D35).
+
 ## [0.4.1] - 2026-10-03
 
 - The built-in escape variable of `danger_guard` is now `CY_ALLOW_DANGER=1`; `CYBERINE_DEVGUARD_ALLOW_DANGER` from 0.4.0 is no longer read. `allow_danger_env` still names a second one.

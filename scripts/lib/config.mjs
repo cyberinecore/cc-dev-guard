@@ -21,6 +21,7 @@ export function defaultConfig() {
     isolateWorktrees: false,
     bashGuard: true,
     dangerGuard: true,
+    bypassStrict: false,
     protectedBranches: [...DEFAULT_PROTECTED_BRANCHES],
     denyAwsS3Deletes: true,
     allowDangerEnv: "",
@@ -41,7 +42,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -163,6 +164,11 @@ function applyRepoFile(c, file) {
       if (value === true) c.dangerGuard = true;
       else if (value === false) w.push(`${where} dangerGuard false is ignored: a repository file can only make the guard stricter`);
       else w.push(`${where} dangerGuard must be true or false; ignored`);
+    } else if (optionName === "bypassStrict") {
+      if (value === true) c.bypassStrict = true;
+      else if (value === false) {
+        if (c.bypassStrict) w.push(`${where} bypassStrict false is ignored: a repository file can only make the guard stricter`);
+      } else w.push(`${where} bypassStrict must be true or false; ignored`);
     } else if (optionName === "denyAwsS3Deletes") {
       if (value === true) c.denyAwsS3Deletes = true;
       else if (value === false) w.push(`${where} denyAwsS3Deletes false is ignored: a repository file can only make the guard stricter`);
@@ -212,6 +218,7 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.isolateWorktrees = parseBool(option(env, "isolate_worktrees"), "isolate_worktrees", false, w);
   c.dangerGuard = parseBool(option(env, "danger_guard"), "danger_guard", true, w);
   c.denyAwsS3Deletes = parseBool(option(env, "deny_aws_s3_deletes"), "deny_aws_s3_deletes", true, w);
+  c.bypassStrict = parseBool(option(env, "bypass_strict"), "bypass_strict", false, w);
   const branches = parseNameList(option(env, "protected_branches"));
   if (branches !== undefined) c.protectedBranches = branches;
   const escapeName = option(env, "allow_danger_env");
@@ -238,6 +245,7 @@ function applyRepoEnv(c, repoEnv, file) {
     else if (optionName === "isolate_worktrees" && raw === "true") c.isolateWorktrees = true;
     else if (optionName === "bash_guard" && raw === "true") c.bashGuard = true;
     else if (optionName === "danger_guard" && raw === "true") c.dangerGuard = true;
+    else if (optionName === "bypass_strict" && raw === "true") c.bypassStrict = true;
     else if (optionName === "deny_aws_s3_deletes" && raw === "true") c.denyAwsS3Deletes = true;
     else w.push(`${where} sets ${optionPrefix}${optionName.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);
   }

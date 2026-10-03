@@ -92,7 +92,7 @@ function pruneMarkers(markerDir, now) {
   }
 }
 
-function denyOnce(v, { input, now, markerDir, warnings }) {
+function denyOnce(v, { input, now, markerDir, warnings, note = "" }) {
   const marker = join(markerDir, markerName(input, v));
   try {
     if (now - statSync(marker).mtimeMs < RETRY_WINDOW_MS) return null;
@@ -104,17 +104,19 @@ function denyOnce(v, { input, now, markerDir, warnings }) {
     const t = new Date(now);
     utimesSync(marker, t, t);
   } catch {}
-  return decision("deny", withWarnings(denyReason(v), warnings));
+  return decision("deny", withWarnings(note ? `${denyReason(v)} ${note}` : denyReason(v), warnings));
 }
 
 const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. Follow the fix named above, or let the user make the change.`;
+
+const bypassOnceNote = `This session runs with bypassPermissions, where no prompt reaches the user, so ${pluginName} holds the first write to that repository and lets a retry through; the user can turn on the bypass_strict option to keep every such write denied.`;
 
 function askOrDeny(input, reason) {
   if (input?.permission_mode === "bypassPermissions") return decision("deny", `${reason} ${bypassNote}`);
   return decision("ask", reason);
 }
 
-export function render(v, { mode, input, now = Date.now(), markerDir, warnings = [] } = {}) {
+export function render(v, { mode, input, now = Date.now(), markerDir, warnings = [], bypassStrict = false } = {}) {
   if (!v || v.action !== "cross" || mode === "off") return null;
   if (ALWAYS_ASK.has(v.why)) return askOrDeny(input, withWarnings(alwaysAskReason(v), warnings));
   switch (mode) {
@@ -123,6 +125,7 @@ export function render(v, { mode, input, now = Date.now(), markerDir, warnings =
     case "deny-once":
       return denyOnce(v, { input, now, markerDir, warnings });
     default:
+      if (input?.permission_mode === "bypassPermissions" && !bypassStrict) return denyOnce(v, { input, now, markerDir, warnings, note: bypassOnceNote });
       return askOrDeny(input, withWarnings(askReason(v), warnings));
   }
 }

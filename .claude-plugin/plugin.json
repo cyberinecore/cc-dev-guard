@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
@@ -97,6 +97,12 @@
       "title": "Deny aws s3 deletes",
       "description": "While danger_guard is on, also deny aws s3 rm, aws s3 rb and aws s3api delete-bucket/delete-object/delete-objects.",
       "default": true
+    },
+    "bypass_strict": {
+      "type": "boolean",
+      "title": "Strict under bypassPermissions",
+      "description": "Under bypassPermissions, deny every write to another repository. Off by default: the first write per session and repository is denied with a note telling Claude to retry only if you asked for that target, and a retry within 10 minutes passes, so you can still ask for a cross-repository change in chat.",
+      "default": false
     },
     "allow_danger_env": {
       "type": "string",

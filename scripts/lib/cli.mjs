@@ -75,7 +75,7 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
     const config = loadConfig({ env, sessionRoot });
     if (config.mode === "off") return null;
     const verdict = (deps.decide || decide)(input, { sessionRoot, env, config });
-    const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings });
+    const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
     if (config.logDecisions && verdict.action === "cross") logDecision(env, input, verdict, out, now);
     return out;
   } catch (e) {
@@ -107,7 +107,7 @@ function bashHook(input, env, deps, now) {
     const verdict = (deps.decide || decide)({ ...input, tool_name: "Bash", tool_input: { file_path: probe } }, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: w.target, via: w.how };
-    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings });
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
     if (config.logDecisions) logDecision(env, input, shown, out, now);
     if (out) return out;
   }
@@ -145,7 +145,7 @@ function mcpHook(input, env, deps, now) {
     const verdict = (deps.decide || decide)({ ...input, tool_input: { file_path: probe } }, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: t.path };
-    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings });
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
     if (config.logDecisions) logDecision(env, input, shown, out, now);
     if (out) return out;
   }
