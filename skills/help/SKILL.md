@@ -33,4 +33,6 @@ Data-destroying Bash commands (recursive rm outside temp and build folders, `git
 
 Under bypassPermissions a write to another repository is denied once per session and repository and a retry within 10 minutes passes, so the user can ask for it in chat; option `bypass_strict` (default off) denies every such write instead. Guard files, settings files, `protect` paths, misplaced worktrees and data-destroying commands stay denied.
 
+A git repository nested inside the session repository under a path the session repository gitignores (an agent's scratch repository in `.local/tmp/`) passes; option `allow_ignored_nested_repos` (default on) turns that off, and a repository file can only turn it off.
+
 Limits: writes hidden in scripts or `sh -c`, files written by a process Bash starts, other MCP servers, or commands you type with `!` are not seen. Without `read_transcript`, a directory removed during the session stays allowed until it ends. Cyberine DevGuard needs `node` on the PATH; without it, or when the hook times out, writes are not checked.

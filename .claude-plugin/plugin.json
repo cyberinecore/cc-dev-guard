@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
@@ -47,6 +47,12 @@
       "type": "boolean",
       "title": "Allow gitignored targets",
       "description": "Let a session write to a path that the other repository ignores, such as its .local/ or build output.",
+      "default": true
+    },
+    "allow_ignored_nested_repos": {
+      "type": "boolean",
+      "title": "Allow repositories nested in ignored paths",
+      "description": "Let a session write into a git repository that sits inside its own repository under a path the session repository gitignores, such as an agent's scratch repository in .local/tmp/. Turn it off to be asked about those writes like any other repository.",
       "default": true
     },
     "log_decisions": {

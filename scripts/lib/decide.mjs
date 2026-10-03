@@ -101,6 +101,13 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
     if (inside && (isSubmoduleOf(targetRepo, s.repo) || git.isGitlink(sessionTop, rel))) return pass("hub-submodule");
   }
 
+  if (why === "cross-repo" && config.allowIgnoredNestedRepos && sessionTop) {
+    const targetTop = git.toplevel(r.dir);
+    const rel = targetTop ? relative(sessionTop, targetTop) : "";
+    const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+    if (inside && git.isIgnored(sessionTop, targetTop)) return pass("ignored-nested-repo");
+  }
+
   if (config.allowIgnored && git.isIgnored(r.dir, r.resolved)) return pass("ignored");
 
   const allowed = allowedDirsFor({ input, env, config, sessionRoot: s.root, readDirs, readScope, deps });

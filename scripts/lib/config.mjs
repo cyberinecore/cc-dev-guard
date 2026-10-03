@@ -15,6 +15,7 @@ export function defaultConfig() {
     extraAllowedDirs: [],
     hubRepos: [],
     allowIgnored: true,
+    allowIgnoredNestedRepos: true,
     logDecisions: false,
     readTranscript: false,
     worktreeGuard: true,
@@ -42,7 +43,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -164,6 +165,11 @@ function applyRepoFile(c, file) {
       if (value === true) c.dangerGuard = true;
       else if (value === false) w.push(`${where} dangerGuard false is ignored: a repository file can only make the guard stricter`);
       else w.push(`${where} dangerGuard must be true or false; ignored`);
+    } else if (optionName === "allowIgnoredNestedRepos") {
+      if (value === false) c.allowIgnoredNestedRepos = false;
+      else if (value === true) {
+        if (!c.allowIgnoredNestedRepos) w.push(`${where} allowIgnoredNestedRepos true is ignored: a repository file cannot turn it back on`);
+      } else w.push(`${where} allowIgnoredNestedRepos must be true or false; ignored`);
     } else if (optionName === "bypassStrict") {
       if (value === true) c.bypassStrict = true;
       else if (value === false) {
@@ -211,6 +217,7 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.extraAllowedDirs = parseDirList(option(env, "extra_allowed_dirs"), "extra_allowed_dirs", w);
   c.hubRepos = parseDirList(option(env, "hub_repos"), "hub_repos", w);
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
+  c.allowIgnoredNestedRepos = parseBool(option(env, "allow_ignored_nested_repos"), "allow_ignored_nested_repos", true, w);
   c.logDecisions = parseBool(option(env, "log_decisions"), "log_decisions", false, w);
   c.readTranscript = parseBool(option(env, "read_transcript"), "read_transcript", false, w);
   c.worktreeGuard = parseBool(option(env, "worktree_guard"), "worktree_guard", true, w);
@@ -241,6 +248,7 @@ function applyRepoEnv(c, repoEnv, file) {
   for (const [optionName, raw] of Object.entries(repoEnv)) {
     if (optionName === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
     else if (optionName === "allow_ignored" && raw === "false") c.allowIgnored = false;
+    else if (optionName === "allow_ignored_nested_repos" && raw === "false") c.allowIgnoredNestedRepos = false;
     else if (optionName === "worktree_guard" && raw === "true") c.worktreeGuard = true;
     else if (optionName === "isolate_worktrees" && raw === "true") c.isolateWorktrees = true;
     else if (optionName === "bash_guard" && raw === "true") c.bashGuard = true;

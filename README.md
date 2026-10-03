@@ -68,6 +68,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `extra_allowed_dirs` | none | absolute directories every session may write to |
 | `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts) |
 | `allow_ignored` | `true` | let writes to paths the other repository gitignores pass |
+| `allow_ignored_nested_repos` | `true` | let writes into a git repository nested inside the session repository under a path the session repository gitignores pass (an agent's scratch repository in `.local/tmp/`); off: ask like any other repository |
 | `log_decisions` | `false` | append each crossing (time, session id, tool, path, verdict) to `decisions.jsonl` in the plugin data directory |
 | `bash_guard` | `true` | read each Bash command for obvious writes (see [Bash and MCP writes](#bash-and-mcp-writes)) and treat each target like a file-tool write |
 | `isolate_worktrees` | `false` | ask before a session started in a linked worktree writes into the main checkout or another worktree of the same repository (file tools, Bash writes, MCP writes) |
@@ -90,7 +91,7 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 ```
 
 - `mode` can only be raised (`off` < `warn` < `deny-once` < `ask`), never set to `off`.
-- `allowIgnored` can only be turned off.
+- `allowIgnored` and `allowIgnoredNestedRepos` can only be turned off.
 - `worktreeGuard`, `bashGuard`, `isolateWorktrees`, `dangerGuard`, `denyAwsS3Deletes` and `bypassStrict` can only be turned on.
 - `protectedBranches` adds branch names to the user's list; it cannot remove one.
 - `protect` lists paths relative to the repository; writes under them ask.

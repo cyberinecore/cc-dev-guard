@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.6.0] - 2026-10-03
+
+- A git repository nested inside the session repository under a path the session repository gitignores now passes, for file tools, Bash writes (`git add`, `git commit` in an agent's scratch repository under `.local/tmp/`) and MCP writes, from the main checkout and from a worktree. Before, it was treated as another repository and asked (denied under `bypassPermissions`). Option `allow_ignored_nested_repos`, default on; off sends those writes back to ask. A repository file can only turn it off (D36).
+
 ## [0.5.0] - 2026-10-03
 
 - Under `bypassPermissions` a write to another repository is no longer a hard deny: the first one per session and repository is denied with a note telling Claude to retry only if the user named that target this turn, and a retry within 10 minutes passes, so the user can ask for a cross-repository change in chat. Guard files, settings files, transcripts, `protect` paths, misplaced worktrees and data-destroying commands stay denied. New option `bypass_strict` (default off) restores the hard deny; a repository file can only turn it on (D35).
