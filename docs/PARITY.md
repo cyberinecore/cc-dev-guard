@@ -42,4 +42,4 @@ Every difference is devguard being stricter. Someone migrating from the Go hook 
 
 94 of 94 cases agree: 50 denied by both, 44 passed by both, none differing from the Go table.
 
-The deny reasons differ on purpose: devguard drops the personal pointers (`settings.json deny list`, the 2026-03-24 incident, `~/.claude/rules/safety.md`) and names `CYBERINE_DEVGUARD_ALLOW_DANGER` or the `allow_danger_env` variable as the escape.
+The deny reasons differ on purpose: devguard drops the personal pointers (`settings.json deny list`, the 2026-03-24 incident, `~/.claude/rules/safety.md`) and names `CY_ALLOW_DANGER` or the `allow_danger_env` variable as the escape.

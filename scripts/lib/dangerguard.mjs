@@ -1,5 +1,5 @@
 export const DEFAULT_PROTECTED_BRANCHES = ["main", "master", "production", "prod", "development", "develop", "dev", "release", "staging"];
-export const ESCAPE_ENV = "CYBERINE_DEVGUARD_ALLOW_DANGER";
+export const ESCAPE_ENV = "CY_ALLOW_DANGER";
 
 const reAwsS3Delete = /\baws\s+(?:[-\w]+\s+)*?s3\s+(rm|rb)\b/i;
 const reAwsS3ApiDel = /\baws\s+(?:[-\w]+\s+)*?s3api\s+delete-(bucket|object|objects)\b/i;

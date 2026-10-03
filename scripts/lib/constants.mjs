@@ -1,5 +1,5 @@
 export const NAME = "cyberine-devguard";
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 export const MODES = ["off", "warn", "deny-once", "ask"];
 export const DEFAULT_MODE = "ask";
 export const RETRY_WINDOW_MS = 10 * 60 * 1000;

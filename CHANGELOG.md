@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.4.1] - 2026-10-03
+
+- The built-in escape variable of `danger_guard` is now `CY_ALLOW_DANGER=1`; `CYBERINE_DEVGUARD_ALLOW_DANGER` from 0.4.0 is no longer read. `allow_danger_env` still names a second one.
+
 ## [0.4.0] - 2026-10-03
 
 - Data-destroying Bash commands are denied in every permission mode, `bypassPermissions` included: recursive `rm` outside temp, worktree and build folders, `git reset --hard`, `git checkout -- .`, `git restore .`, `git clean -f`, force-push to a protected branch or with no branch named, `terraform destroy`, `kubectl delete` of a namespace, volume or `--all`, `docker system prune`, `docker volume rm`/`prune`, `docker compose down -v`, `DROP`/`TRUNCATE`, and `aws s3` deletes. A port of the Go `bash-guard` hook with case parity (`docs/PARITY.md`). New options `danger_guard` (default on), `protected_branches`, `deny_aws_s3_deletes` (default on) and `allow_danger_env`; escape `CYBERINE_DEVGUARD_ALLOW_DANGER=1`, never from a repository's settings env (D34).

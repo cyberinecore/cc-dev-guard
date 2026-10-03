@@ -75,7 +75,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `danger_guard` | `true` | deny data-destroying Bash commands in every permission mode (see [Data-destroying commands](#data-destroying-commands)) |
 | `protected_branches` | `main`, `master`, `production`, `prod`, `development`, `develop`, `dev`, `release`, `staging` | branches a force-push to is denied |
 | `deny_aws_s3_deletes` | `true` | also deny `aws s3 rm`/`rb` and `aws s3api delete-*` |
-| `allow_danger_env` | none | name of a second variable that lifts `danger_guard` when set to `1`, besides `CYBERINE_DEVGUARD_ALLOW_DANGER` |
+| `allow_danger_env` | none | name of a second variable that lifts `danger_guard` when set to `1`, besides `CY_ALLOW_DANGER` |
 | `read_transcript` | `false` | take the allowed directories from the environment snapshot in the session transcript instead of settings, `/add-dir` and `--add-dir`; the only setting that makes Cyberine DevGuard open the transcript |
 
 A repository can add `.claude/cyberine-devguard.json`, which may only make the guard stricter:
@@ -121,7 +121,7 @@ With `danger_guard` on (the default), a Bash command that destroys data or rewri
 
 The same checks run on the quoted text handed to `ssh`, `bash -c`, `sh -c`, `eval`, `xargs`, `sudo`, `env`, `timeout`, `docker exec`, `kubectl exec` and `*.sh` wrappers, three levels deep. Text-only commands (`echo`, `grep`, `git log`, `git commit -m` messages and similar) and comment lines are not read, so mentioning a command does not trigger it.
 
-To run such a command, run it yourself, or start the session with `CYBERINE_DEVGUARD_ALLOW_DANGER=1` in its environment (or the variable you named in `allow_danger_env`). A value set through the `env` block of a repository's `.claude/settings.json` or `.claude/settings.local.json` is ignored, so a cloned repository cannot lift the guard. A repository file can turn the guard on and add protected branches, never turn it off.
+To run such a command, run it yourself, or start the session with `CY_ALLOW_DANGER=1` in its environment (or the variable you named in `allow_danger_env`). A value set through the `env` block of a repository's `.claude/settings.json` or `.claude/settings.local.json` is ignored, so a cloned repository cannot lift the guard. A repository file can turn the guard on and add protected branches, never turn it off.
 
 This is a pattern check on the command text, not a sandbox: a script file, an alias, or a program that deletes on its own is not seen. It is the one part of Cyberine DevGuard that denies outright, because `bypassPermissions` skips every prompt and settings `deny` rules are the only other gate.
 

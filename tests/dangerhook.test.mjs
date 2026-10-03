@@ -25,7 +25,7 @@ test("a dangerous command is denied in every permission mode and every devguard 
     for (const dgMode of ["ask", "deny-once", "warn", "off"]) {
       const out = bash(a, "git push --force origin main", isolatedEnv({ CLAUDE_PLUGIN_OPTION_MODE: dgMode }), mode);
       assert.equal(decisionOf(out), "deny", `${mode} / ${dgMode}`);
-      assert.match(out.hookSpecificOutput.permissionDecisionReason, /force-push to protected branch `main` is denied\. cyberine-devguard denies this in every permission mode\..*CYBERINE_DEVGUARD_ALLOW_DANGER=1/);
+      assert.match(out.hookSpecificOutput.permissionDecisionReason, /force-push to protected branch `main` is denied\. cyberine-devguard denies this in every permission mode\..*CY_ALLOW_DANGER=1/);
     }
   }
 });
@@ -38,8 +38,8 @@ test("a safe command and a session-repo write pass", () => {
 
 test("the escape variable lifts the guard, and allow_danger_env names a second one", () => {
   const a = session();
-  assert.equal(bash(a, "git reset --hard HEAD~1", isolatedEnv({ CYBERINE_DEVGUARD_ALLOW_DANGER: "1" })), null);
-  assert.equal(decisionOf(bash(a, "git reset --hard HEAD~1", isolatedEnv({ CYBERINE_DEVGUARD_ALLOW_DANGER: "true" }))), "deny");
+  assert.equal(bash(a, "git reset --hard HEAD~1", isolatedEnv({ CY_ALLOW_DANGER: "1" })), null);
+  assert.equal(decisionOf(bash(a, "git reset --hard HEAD~1", isolatedEnv({ CY_ALLOW_DANGER: "true" }))), "deny");
   const custom = isolatedEnv({ CLAUDE_PLUGIN_OPTION_ALLOW_DANGER_ENV: "NF_ALLOW_DANGER" });
   const denied = bash(a, "git reset --hard HEAD~1", custom);
   assert.match(denied.hookSpecificOutput.permissionDecisionReason, /NF_ALLOW_DANGER=1/);
@@ -47,8 +47,8 @@ test("the escape variable lifts the guard, and allow_danger_env names a second o
 });
 
 test("namedEnv carries the escape variables from the process environment", () => {
-  const picked = namedEnv({ CYBERINE_DEVGUARD_ALLOW_DANGER: "1", CLAUDE_PLUGIN_OPTION_ALLOW_DANGER_ENV: "NF_ALLOW_DANGER", NF_ALLOW_DANGER: "1", OTHER: "x" });
-  assert.equal(picked.CYBERINE_DEVGUARD_ALLOW_DANGER, "1");
+  const picked = namedEnv({ CY_ALLOW_DANGER: "1", CLAUDE_PLUGIN_OPTION_ALLOW_DANGER_ENV: "NF_ALLOW_DANGER", NF_ALLOW_DANGER: "1", OTHER: "x" });
+  assert.equal(picked.CY_ALLOW_DANGER, "1");
   assert.equal(picked.NF_ALLOW_DANGER, "1");
   assert.equal(picked.OTHER, undefined);
   assert.equal(namedEnv({ CLAUDE_PLUGIN_OPTION_ALLOW_DANGER_ENV: "BAD NAME", "BAD NAME": "1" })["BAD NAME"], undefined);
@@ -58,8 +58,8 @@ test("an escape variable set by the repository's .claude settings env is ignored
   for (const file of ["settings.json", "settings.local.json"]) {
     const a = session();
     mkdirSync(join(a, ".claude"), { recursive: true });
-    writeFileSync(join(a, ".claude", file), JSON.stringify({ env: { CYBERINE_DEVGUARD_ALLOW_DANGER: "1" } }));
-    const out = bash(a, "terraform destroy -auto-approve", isolatedEnv({ CYBERINE_DEVGUARD_ALLOW_DANGER: "1" }));
+    writeFileSync(join(a, ".claude", file), JSON.stringify({ env: { CY_ALLOW_DANGER: "1" } }));
+    const out = bash(a, "terraform destroy -auto-approve", isolatedEnv({ CY_ALLOW_DANGER: "1" }));
     assert.equal(decisionOf(out), "deny", file);
     assert.match(out.hookSpecificOutput.permissionDecisionReason, /comes from the env block of the repository's \.claude settings and is ignored/);
   }
