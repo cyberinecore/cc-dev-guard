@@ -117,7 +117,7 @@ test("an internal error asks with a readable reason", () => {
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /boom/);
 });
 
-test("under bypassPermissions every ask becomes a deny, because the harness lets some asks through there", () => {
+test("under bypassPermissions the first cross-repo write, every always-ask path and an internal error are denied, because the harness lets some asks through there", () => {
   const bypass = { ...input, permission_mode: "bypassPermissions" };
   for (const v of [cross, { action: "cross", why: "config-file", target: "/a/.claude/cyberine-devguard.json" }, { action: "cross", why: "protected", target: "/a/infra/x" }]) {
     const out = render(v, { mode: "ask", input: bypass, now: Date.now(), markerDir: tempDir() });
