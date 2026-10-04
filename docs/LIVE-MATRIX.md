@@ -80,3 +80,19 @@ Without `--add-dir b`, the filesystem server itself refused the control write ("
 Danger guard (D34), 2.1.287, model haiku, 2026-10-03, `--setting-sources project,local` so no other hook reads Bash: under `--dangerously-skip-permissions` a request to run `git reset --hard HEAD` in a temp repository holding an uncommitted change was denied with the danger reason and the change survived; the same run started with the escape variable set to `1` ran the command and the change was gone. Measured with `CYBERINE_DEVGUARD_ALLOW_DANGER` on 0.4.0 and again with its 0.4.1 name `CY_ALLOW_DANGER`, same outcome.
 
 Bypass retry (D35), 0.5.0, 2.1.287, model haiku, 2026-10-03, `--dangerously-skip-permissions`, session repository `a`, target in repository `b`: a prompt in which the user explicitly asked for `b/asked.txt` made two Write calls, the first denied with the deny-once reason and the retry passing, and the file was written; a prompt that said not to retry after a refusal made one Write call, which was denied, and `b/notasked.txt` was not written.
+
+## `/cd` rows
+
+2.1.289 (Claude Code), model haiku, 2026-10-04, interactive session driven through tmux (`/cd` is a local-jsx command and does not run under `-p`), a probe plugin plus a `--settings` file logging every hook input. Session started in this repository, then `/cd` into a throwaway git repository `b` after answering "Yes, move here" to the trust prompt.
+
+| row | observed |
+|---|---|
+| hook input `cwd` after `/cd` | `b` |
+| `CLAUDE_PROJECT_DIR` in the hook environment after `/cd` | the launch directory, unchanged (README "After `/cd`" limit) |
+| `CwdChanged` on `/cd`, declared by a plugin or by settings | not fired |
+| `CwdChanged` on a Bash `cd /tmp && pwd` | not fired |
+| `UserPromptSubmit` / `UserPromptExpansion` on `/cd` | not fired; the next typed prompt fires `UserPromptSubmit` with `cwd` `b` |
+| Write into `b` after `/cd` | devguard asks (`explain`: `cross (cross-repo) -> asks`) |
+| transcript after `/cd` | a new file under the projects folder of `b`, first line `{"type":"relocated","relocatedCwd":"b",...}`, then a `system` / `local_command` record with `commandRun.command` `cd` |
+
+No hook tells a plugin that the user moved the session, so a user who works in `b` after `/cd` is asked on every write there; `/add-dir b` is the supported way to work in a second repository.
