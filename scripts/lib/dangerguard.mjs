@@ -3,7 +3,10 @@ export const ESCAPE_ENV = "CY_ALLOW_DANGER";
 
 const reAwsS3Delete = /\baws\s+(?:[-\w]+\s+)*?s3\s+(rm|rb)\b/i;
 const reAwsS3ApiDel = /\baws\s+(?:[-\w]+\s+)*?s3api\s+delete-(bucket|object|objects)\b/i;
-const reSQLDrop = /\b(DROP\s+(DATABASE|SCHEMA|TABLE)|TRUNCATE\s+(TABLE\s+)?\w)/i;
+const reSQLDrop = /\bDROP\s+(DATABASE|SCHEMA|TABLE)/i;
+const reSQLTruncate = /\btruncate\s+(?:table\s+|only\s+)?(?:"[^"]+"|`[^`]+`|[A-Za-z_][\w.$]*)(?=[\s;'"`)\\,/*]|--|$)/i;
+const reHeredoc = /(?<!<)<<(-?)\s*(['"]?)([A-Za-z_][\w.-]*)\2/g;
+const reBareMktemp = /(["']?)\$\(mktemp(?:\s+[-\w./]+)*\s*\)\1(?=\s|$)/g;
 const reTerraformDestroy = /\bterraform\s+(?:[-\w]+\s+)*?destroy\b/;
 const reKubectlDelete = /\bkubectl\s+(?:[-\w]+\s+)*?delete\s+(?:[-\w]+\s+)*?(namespace|ns|pv|pvc|--all|-A)\b/;
 const reDockerPrune = /\bdocker\s+(system\s+prune|volume\s+(rm|prune))\b/;
@@ -21,6 +24,7 @@ const TEXT_TOOLS = new Set(["echo", "printf", "grep", "rg", "egrep", "fgrep", "u
 const GIT_TEXT_SUBCOMMANDS = new Set(["log", "grep", "show", "diff", "blame"]);
 const WRAPPER_BINS = new Set(["ssh", "bash", "sh", "zsh", "eval", "xargs", "sudo", "nohup", "timeout", "gtimeout", "caffeinate", "env", "script"]);
 const QUOTED_ARG_BINS = new Set(["git", "gh", "jira", "curl"]);
+const HEREDOC_SINK_BINS = new Set(["cat", "tee"]);
 
 const fields = (s) => s.split(/\s+/).filter(Boolean);
 const baseName = (p) => {
@@ -143,6 +147,84 @@ function stripQuotedArgs(sub) {
   return b;
 }
 
+function unquotedAt(line, index) {
+  const stack = [];
+  for (let i = 0; i < index; i++) {
+    const c = line[i];
+    const top = stack[stack.length - 1];
+    if (top === "'") {
+      if (c === "'") stack.pop();
+      continue;
+    }
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if (c === "$" && line[i + 1] === "(") {
+      stack.push("(");
+      i++;
+      continue;
+    }
+    if (top === "(" && c === ")") {
+      stack.pop();
+      continue;
+    }
+    if (top === '"') {
+      if (c === '"') stack.pop();
+      continue;
+    }
+    if (c === "'" || c === '"') stack.push(c);
+  }
+  return !stack.includes("'") && stack[stack.length - 1] !== '"';
+}
+
+function heredocSinkOnly(line, m) {
+  const before = line.slice(0, m.index);
+  const after = line.slice(m.index + m[0].length);
+  if (!unquotedAt(line, m.index)) return false;
+  if (/[<>]\(/.test(line) || /\\\s*$/.test(line) || /\|/.test(after)) return false;
+  if ([...line.matchAll(reHeredoc)].length !== 1) return false;
+  const sub = before.lastIndexOf("$(");
+  const cut = Math.max(sub, before.lastIndexOf("|"), before.lastIndexOf(";"), before.lastIndexOf("&"));
+  if (!HEREDOC_SINK_BINS.has(leadingBin(before.slice(cut + 1).replace(/^\(/, "")))) return false;
+  if (cut !== sub || sub < 0) return true;
+  const outer = before.slice(0, sub);
+  const outerCut = Math.max(outer.lastIndexOf("$("), outer.lastIndexOf("|"), outer.lastIndexOf(";"), outer.lastIndexOf("&"));
+  return outerCut < 0 && leadingBin(outer) === "git";
+}
+
+function leadingBin(text) {
+  let toks = fields(text);
+  while (toks.length && (isAssignment(toks[0]) || toks[0] === "sudo")) toks = toks.slice(1);
+  return toks.length ? baseName(toks[0]) : "";
+}
+
+function stripTextHeredocs(cmd) {
+  const lines = cmd.split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    out.push(line);
+    const docs = [...line.matchAll(reHeredoc)];
+    if (docs.length !== 1 || !heredocSinkOnly(line, docs[0])) continue;
+    const m = docs[0];
+    const delimiter = m[3];
+    let end = -1;
+    for (let j = i + 1; j < lines.length; j++) {
+      if ((m[1] === "-" ? lines[j].replace(/^\t+/, "") : lines[j]) === delimiter) {
+        end = j;
+        break;
+      }
+    }
+    if (end < 0) continue;
+    const body = lines.slice(i + 1, end);
+    if (!m[2] && body.some((l) => l.includes("$(") || l.includes("`"))) continue;
+    out.push(lines[end]);
+    i = end;
+  }
+  return out.join("\n");
+}
+
 function stripCommentLines(cmd) {
   return cmd
     .split("\n")
@@ -158,7 +240,7 @@ export function dangerReason(command, { home = "", protectedBranches = DEFAULT_P
 
 function guardDepth(cmd, depth, opts) {
   if (depth > 3) return "";
-  for (const sub of splitSubcommands(stripCommentLines(cmd))) {
+  for (const sub of splitSubcommands(stripCommentLines(stripTextHeredocs(cmd)))) {
     if (isTextOnly(sub)) continue;
     const [bin] = firstBin(sub);
     const scan = QUOTED_ARG_BINS.has(bin) ? stripQuotedArgs(sub) : sub;
@@ -176,7 +258,7 @@ function guardDepth(cmd, depth, opts) {
 
 function subcommandReason(s, opts) {
   if (opts.awsS3 && (reAwsS3Delete.test(s) || reAwsS3ApiDel.test(s))) return "`aws s3 rm/rb` and `aws s3api delete-*` are denied (they delete buckets or objects).";
-  if (reSQLDrop.test(s)) return "DROP DATABASE/SCHEMA/TABLE and TRUNCATE are denied.";
+  if (reSQLDrop.test(s) || reSQLTruncate.test(s)) return "DROP DATABASE/SCHEMA/TABLE and TRUNCATE are denied.";
   if (reTerraformDestroy.test(s)) return "`terraform destroy` is denied.";
   if (reKubectlDelete.test(s)) return "`kubectl delete` of a namespace, pv/pvc, or --all is denied.";
   if (reDockerPrune.test(s) || reComposeDownV.test(s)) return "`docker system prune`, `docker volume rm/prune` and `docker compose down -v` are denied (they delete volumes).";
@@ -208,7 +290,7 @@ function rmReason(cmd, { home }) {
   for (const m of cmd.matchAll(reRm)) {
     let recursive = false;
     const targets = [];
-    for (const t of fields(m[3])) {
+    for (const t of fields(m[3].replace(reBareMktemp, " "))) {
       if (t === "--") continue;
       if (t.startsWith("--")) {
         if (t === "--recursive") recursive = true;

@@ -42,4 +42,15 @@ Every difference is devguard being stricter. Someone migrating from the Go hook 
 
 94 of 94 cases agree: 50 denied by both, 44 passed by both, none differing from the Go table.
 
+Intended divergences since D37 (task km5zk), covered by `DEVGUARD_ALLOWS` and `DEVGUARD_DENIES` in the same fixture file and not part of the parity run, which compares the Go table only:
+
+| command shape | Go guard | devguard | why |
+|---|---|---|---|
+| heredoc body received by `cat` or `tee` (inside `$(...)` only as a `git` argument), unquoted `<<`, no pipe, process substitution or line continuation, closing delimiter present, no `$(` or backtick under an unquoted delimiter (`cat > f.sql <<'EOF'`, a `git commit -m "$(cat <<'EOF' ...)"` message) | denies when the body names a dangerous command | passes | the body is file content, not a command |
+| any other heredoc (`psql`, `bash`, `ssh`, `awk`, piped onward, `<<<`, a quoted `'<<EOF'`, `bash -c "$(cat <<'EOF' ...)"`) | denies | denies | unchanged |
+| `truncate` followed by a word that continues with `-` (`python -c "print('truncate text-sm')"`) | denies | passes | a Tailwind class, not SQL |
+| `truncate` followed by a table name, any case (`truncate users;`, `TRUNCATE TABLE x`, `truncate a, b`) | denies | denies | unchanged |
+| `rm -rf "$(mktemp -d)"`, the whole argument one substitution of `mktemp` with flags and a template | denies (unresolved substitution) | passes | a directory the same command just created in the temp folder |
+| `rm -rf "$(mktemp -d)"/*`, `.../..`, or a substitution running anything besides `mktemp` | denies | denies | unchanged |
+
 The deny reasons differ on purpose: devguard drops the personal pointers (`settings.json deny list`, the 2026-03-24 incident, `~/.claude/rules/safety.md`) and names `CY_ALLOW_DANGER` or the `allow_danger_env` variable as the escape.

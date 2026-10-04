@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.6.1] - 2026-10-04
+
+- `danger_guard` stops denying three harmless shapes it inherited from the Go guard: a heredoc body written by a text tool such as `cat > seed.sql <<'EOF'` or a `git commit -m "$(cat <<'EOF' ...)"` message, a Tailwind `truncate` class (`truncate text-sm`) in `python -c` or `node -e`, and `rm -rf "$(mktemp -d)"`. A heredoc fed to anything but `cat` or `tee` (or piped onward), `truncate` followed by a table name in any case, and a `$(mktemp ...)` argument with anything appended or anything else inside are still denied (D37, `docs/PARITY.md`).
+
 ## [0.6.0] - 2026-10-03
 
 - A git repository nested inside the session repository under a path the session repository gitignores now passes, for file tools, Bash writes (`git add`, `git commit` in an agent's scratch repository under `.local/tmp/`) and MCP writes, from the main checkout and from a worktree. Before, it was treated as another repository and asked (denied under `bypassPermissions`). Option `allow_ignored_nested_repos`, default on; off sends those writes back to ask. A repository file can only turn it off (D36).
