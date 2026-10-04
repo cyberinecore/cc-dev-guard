@@ -33,6 +33,8 @@ Before the bypass fix (first run, same day), an `ask` under `bypassPermissions` 
 
 Re-run on 2.1.287 (Claude Code), model haiku, 2026-10-01T18:50Z: every row's "target written" matched the table above. The same day a copy of the plugin with the bypass conversion removed answered a raw `ask` under `--dangerously-skip-permissions` for a Write into repository `b`: `.claude/x.md`, `.git/x.sample` and `.vscode/x.json` were written, `plain.txt` and `.dotfile` were not. A second run wrote `.bashrc`, `.gitmodules`, `.mcp.json`, `.ripgreprc`, `.idea/x.xml`, `.husky/pre-commit` and `.devcontainer/x.json`, and held `.env` and `.gitignore`: the safety-check path is a fixed list of names in the 2.1.287 binary (folders `.git`, `.vscode`, `.idea`, `.claude`, `.husky`, `.cargo`, `.devcontainer`, `.yarn`, `.mvn`; files `.gitconfig`, `.gitmodules`, `.bashrc`, `.bash_profile`, `.zshrc`, `.zprofile`, `.profile`, `.ripgreprc`, `.mcp.json`), not every dotfile. The deny conversion is still needed on 2.1.287.
 
+Re-run on 2.1.289 (Claude Code), model haiku, 2026-10-04T08:25Z, `tests/live/matrix.sh`: all 20 rows' "target written" matched the table above.
+
 Two hooks answering the same write (measured the same day, `acceptEdits`): devguard answered `ask` and a second test plugin answered `deny`; the tool result was the deny and the write did not run.
 
 ## Worktree rows
@@ -96,3 +98,5 @@ Bypass retry (D35), 0.5.0, 2.1.287, model haiku, 2026-10-03, `--dangerously-skip
 | transcript after `/cd` | a new file under the projects folder of `b`, first line `{"type":"relocated","relocatedCwd":"b",...}`, then a `system` / `local_command` record with `commandRun.command` `cd` |
 
 No hook tells a plugin that the user moved the session, so a user who works in `b` after `/cd` is asked on every write there; `/add-dir b` is the supported way to work in a second repository.
+
+Confirmed with this plugin the same day in an interactive tmux session (`--plugin-dir .`, `--setting-sources project,local`, `--dangerously-skip-permissions`, session in `a`): after `/cd` into a fresh repository `c`, a Write to `c/z.txt` was held with "Default: NO. ... is outside this session's repository `a`", and nothing was written. Claude Code 2.1.289 prints a PreToolUse deny in the transcript as `PreToolUse:Write hook error: <reason>`. In the default permission mode the interactive dialog for a cross-repository Write showed Claude Code's own "Do you want to create x.txt?" choices with no devguard reason on screen; Claude Code also asks there on its own for a path outside the working directory, so that run does not separate devguard's ask from Claude Code's.
