@@ -1,5 +1,5 @@
-import { closeSync, fstatSync, openSync, readSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
+import { dirname, isAbsolute } from "node:path";
 import { resolveDir } from "./paths.mjs";
 
 const MARKER = Buffer.from('"type":"environment"');
@@ -42,7 +42,48 @@ export function resolveAllowedDirs(dirs) {
   return out;
 }
 
+const RELOCATED_MARKER = Buffer.from('"type":"relocated"');
+
+function isDirectory(path) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function parseLine(line) {
+  let end = line.length;
+  if (end > 0 && line[end - 1] === 0x0d) end -= 1;
+  try {
+    return JSON.parse(line.subarray(0, end).toString("utf8"));
+  } catch {
+    return null;
+  }
+}
+
+export function readRelocatedDir(transcriptPath, sessionId, options = {}) {
+  if (typeof sessionId !== "string" || sessionId === "") return "";
+  const found = scanTranscript(transcriptPath, options, RELOCATED_MARKER, (line) => {
+    const record = parseLine(line);
+    if (!record || typeof record !== "object" || record.type !== "relocated") return null;
+    if (record.sessionId !== sessionId) return unavailable("the last /cd record belongs to another session");
+    const dir = record.relocatedCwd;
+    const resolved = typeof dir === "string" && isAbsolute(dir) ? resolveDir(dir) : "";
+    if (!resolved || dirname(resolved) === resolved || !isDirectory(resolved)) return unavailable("the last /cd record names no usable directory");
+    return { ok: true, dir: resolved };
+  });
+  return found.ok ? found.dir : "";
+}
+
 export function readAllowedDirs(transcriptPath, options = {}) {
+  return scanTranscript(transcriptPath, options, MARKER, (line) => {
+    const dirs = snapshotDirs(line);
+    return dirs ? { ok: true, dirs: resolveAllowedDirs(dirs) } : null;
+  });
+}
+
+function scanTranscript(transcriptPath, options, marker, extract) {
   const { chunkSize, scanBudget, maxLineBytes } = { ...READER_DEFAULTS, ...options };
   if (typeof transcriptPath !== "string" || transcriptPath === "") return unavailable("the hook input has no transcript path");
   if (!isAbsolute(transcriptPath)) return unavailable("the transcript path is not absolute");
@@ -55,7 +96,7 @@ export function readAllowedDirs(transcriptPath, options = {}) {
   try {
     const st = fstatSync(fd);
     if (!st.isFile()) return unavailable("the transcript path is not a regular file");
-    return scanBackwards(fd, st.size, { chunkSize, scanBudget, maxLineBytes });
+    return scanBackwards(fd, st.size, { chunkSize, scanBudget, maxLineBytes, marker, extract });
   } catch (e) {
     return unavailable(`the transcript cannot be read (${e.code || e.message})`);
   } finally {
@@ -63,7 +104,7 @@ export function readAllowedDirs(transcriptPath, options = {}) {
   }
 }
 
-function scanBackwards(fd, size, { chunkSize, scanBudget, maxLineBytes }) {
+function scanBackwards(fd, size, { chunkSize, scanBudget, maxLineBytes, marker, extract }) {
   const chunk = Buffer.alloc(Math.max(1, Math.min(chunkSize, size || 1)));
   let pieces = [];
   let pieceLen = 0;
@@ -89,9 +130,8 @@ function scanBackwards(fd, size, { chunkSize, scanBudget, maxLineBytes }) {
     overflow = false;
     if (skipped || parts.length === 0) return null;
     const line = parts.length === 1 ? parts[0] : Buffer.concat(parts.reverse());
-    if (!line.includes(MARKER)) return null;
-    const dirs = snapshotDirs(line);
-    return dirs ? { ok: true, dirs: resolveAllowedDirs(dirs) } : null;
+    if (!line.includes(marker)) return null;
+    return extract(line);
   };
 
   let pos = size;

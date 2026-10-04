@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.7.0] - 2026-10-04
+
+- With `read_transcript` on, a `/cd` into another repository is followed: the directory of the latest `/cd` becomes an allowed directory, so writes there no longer ask. Claude Code fires no hook for `/cd`, so this reads the `relocated` record Claude Code writes into the transcript; a `cd` inside a Bash command never widens the scope, and with `read_transcript` off nothing changes (`/add-dir` still works everywhere) (D38).
+- Fixed: `cp`, `mv`, `ln`, `install` and `rsync` with a session transcript, a Claude Code settings file or a Cyberine DevGuard configuration file as the destination ran without a prompt, because the destination was judged only as a directory. They now ask like a redirect to the same file does.
+
 ## [0.6.1] - 2026-10-04
 
 - `danger_guard` stops denying three harmless shapes it inherited from the Go guard: a heredoc body written by a text tool such as `cat > seed.sql <<'EOF'` or a `git commit -m "$(cat <<'EOF' ...)"` message, a Tailwind `truncate` class (`truncate text-sm`) in `python -c` or `node -e`, and `rm -rf "$(mktemp -d)"`. A heredoc fed to anything but `cat` or `tee` (or piped onward), `truncate` followed by a table name in any case, and a `$(mktemp ...)` argument with anything appended or anything else inside are still denied (D37, `docs/PARITY.md`).

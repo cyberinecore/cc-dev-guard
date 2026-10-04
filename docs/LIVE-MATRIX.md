@@ -97,6 +97,16 @@ Bypass retry (D35), 0.5.0, 2.1.287, model haiku, 2026-10-03, `--dangerously-skip
 | Write into `b` after `/cd` | devguard asks (`explain`: `cross (cross-repo) -> asks`) |
 | transcript after `/cd` | a new file under the projects folder of `b`, first line `{"type":"relocated","relocatedCwd":"b",...}`, then a `system` / `local_command` record with `commandRun.command` `cd` |
 
-No hook tells a plugin that the user moved the session, so a user who works in `b` after `/cd` is asked on every write there; `/add-dir b` is the supported way to work in a second repository.
+No hook tells a plugin that the user moved the session, so with default settings a user who works in `b` after `/cd` is asked on every write there; `/add-dir b` works in every setting, and since 0.7.0 `read_transcript` follows the `/cd` (D38, rows below).
+
+`read_transcript` follows `/cd` (D38), 0.7.0, 2.1.289, model haiku, 2026-10-04, interactive tmux, `--plugin-dir .`, `--setting-sources project,local`, `--dangerously-skip-permissions`, `CLAUDE_PLUGIN_OPTION_READ_TRANSCRIPT=true`, fresh repositories `e` (session) and `f`, `g`:
+
+| row | observed |
+|---|---|
+| transcript after `/cd` in a session with history | the file moved from the projects folder of `e` to that of `f`; first line `{"type":"mode",...}`, the `relocated` record appended mid-file (lines 23 and 36 in a probe with two moves), so a first-line reader misses it |
+| environment snapshot after `/cd` | `additionalWorkingDirectories` lists the old directory `e` |
+| first Write to `f/z.txt` after `/cd f` | written, no devguard message (fresh session and repository, so not a deny-once retry) |
+| Bash `cd /tmp/dgcd2/g && touch new.txt` in the same session | held: "outside this session's repository `e` and its allowed directories (`e`, `f`)" |
+| the same `/cd` without `read_transcript` (0.6.x run above) | held |
 
 Confirmed with this plugin the same day in an interactive tmux session (`--plugin-dir .`, `--setting-sources project,local`, `--dangerously-skip-permissions`, session in `a`): after `/cd` into a fresh repository `c`, a Write to `c/z.txt` was held with "Default: NO. ... is outside this session's repository `a`", and nothing was written. Claude Code 2.1.289 prints a PreToolUse deny in the transcript as `PreToolUse:Write hook error: <reason>`. In the default permission mode the interactive dialog for a cross-repository Write showed Claude Code's own "Do you want to create x.txt?" choices with no devguard reason on screen; Claude Code also asks there on its own for a path outside the working directory, so that run does not separate devguard's ask from Claude Code's.

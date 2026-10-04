@@ -13,7 +13,7 @@ import { makeGit } from "./git.mjs";
 import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
 import { dangerReason, ESCAPE_ENV } from "./dangerguard.mjs";
 import { mcpWriteTargets } from "./mcpfs.mjs";
-import { render, renderDanger, renderError, renderWorktree } from "./output.mjs";
+import { GUARDED_FILE_WHYS, render, renderDanger, renderError, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 
@@ -83,6 +83,14 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
   }
 }
 
+function judgeTarget(decideFn, input, target, isDir, ctx) {
+  const ask = (path) => decideFn({ ...input, tool_input: { file_path: path } }, ctx);
+  if (!isDir) return ask(target);
+  const itself = ask(target);
+  if (itself.action === "cross" && GUARDED_FILE_WHYS.has(itself.why)) return itself;
+  return ask(join(target, ".devguard-probe"));
+}
+
 function bashHook(input, env, deps, now) {
   const command = input.tool_input?.command;
   if (typeof command !== "string" || command === "") return null;
@@ -103,8 +111,7 @@ function bashHook(input, env, deps, now) {
   }
   if (!config.bashGuard) return null;
   for (const w of writes) {
-    const probe = w.isDir ? join(w.target, ".devguard-probe") : w.target;
-    const verdict = (deps.decide || decide)({ ...input, tool_name: "Bash", tool_input: { file_path: probe } }, { sessionRoot, env, config, deps: { git } });
+    const verdict = judgeTarget((deps.decide || decide), { ...input, tool_name: "Bash" }, w.target, w.isDir, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: w.target, via: w.how };
     const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
@@ -141,8 +148,7 @@ function mcpHook(input, env, deps, now) {
   if (config.mode === "off") return null;
   const git = deps.git || makeGit();
   for (const t of targets) {
-    const probe = t.isDir ? join(t.path, ".devguard-probe") : t.path;
-    const verdict = (deps.decide || decide)({ ...input, tool_input: { file_path: probe } }, { sessionRoot, env, config, deps: { git } });
+    const verdict = judgeTarget((deps.decide || decide), input, t.path, t.isDir, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: t.path };
     const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });

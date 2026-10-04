@@ -52,6 +52,32 @@ test("the Bash hook asks for a write into another repository and stays silent in
   assert.ok(runHook({ raw: bash(`echo x > ${JSON.stringify(join(f.b, "x.md"))}`, f.a), env: { ...env, CLAUDE_PLUGIN_OPTION_MODE: "warn" } }).systemMessage, "warn mode");
 });
 
+test("cp, mv, ln, install and rsync onto a transcript, settings or guard file ask like a redirect does", () => {
+  const f = scopeFixture();
+  const env = isolatedEnv({ CLAUDE_PROJECT_DIR: f.a });
+  const project = join(env.CLAUDE_CONFIG_DIR, "projects", "-x");
+  mkdirSync(project, { recursive: true });
+  const transcript = join(project, "s1.jsonl");
+  writeFileSync(transcript, "{}\n");
+  mkdirSync(join(f.a, ".claude"), { recursive: true });
+  const settings = join(f.a, ".claude", "settings.local.json");
+  const guard = join(f.a, ".claude", "cyberine-devguard.json");
+  for (const [cmd, target, why] of [
+    ["cp /tmp/forged.jsonl", transcript, /transcript/],
+    ["mv /tmp/forged.jsonl", transcript, /transcript/],
+    ["ln -sf /tmp/forged.jsonl", transcript, /transcript/],
+    ["install -m 600 /tmp/forged.jsonl", transcript, /transcript/],
+    ["rsync /tmp/forged.jsonl", transcript, /transcript/],
+    ["cp /tmp/s.json", settings, /settings file/],
+    ["cp /tmp/g.json", guard, /configuration file/],
+  ]) {
+    const out = runHook({ raw: bash(`${cmd} ${JSON.stringify(target)}`, f.a), env });
+    assert.equal(out?.hookSpecificOutput?.permissionDecision, "ask", `${cmd} -> ${target}`);
+    assert.match(out.hookSpecificOutput.permissionDecisionReason, why, cmd);
+  }
+  assert.equal(runHook({ raw: bash("cp a.txt ./", f.a), env }), null, "a plain directory destination in the session repository stays silent");
+});
+
 test("a Bash write to a settings file asks even inside the session repository", () => {
   const f = scopeFixture();
   mkdirSync(join(f.a, ".claude"), { recursive: true });

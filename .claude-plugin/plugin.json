@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
@@ -64,7 +64,7 @@
     "read_transcript": {
       "type": "boolean",
       "title": "Read allowed directories from the transcript",
-      "description": "Read the environment snapshot that Claude Code writes into the session transcript, which also reflects directories removed during the session. Off by default: Cyberine DevGuard then takes allowed directories from settings, /add-dir and --add-dir, and never opens the transcript.",
+      "description": "Read the environment snapshot that Claude Code writes into the session transcript, which also reflects directories removed during the session, and allow the directory a /cd moved the session to. Off by default: Cyberine DevGuard then takes allowed directories from settings, /add-dir and --add-dir, and never opens the transcript.",
       "default": false
     },
     "worktree_guard": {

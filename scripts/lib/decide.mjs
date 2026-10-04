@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
 import { configDirOf, matchAllowance } from "./allowances.mjs";
 import { defaultConfig, isClaudeSettingsFile, isConfigFile } from "./config.mjs";
@@ -5,7 +6,7 @@ import { PATH_KEYS } from "./constants.mjs";
 import { isSubmoduleOf, makeGit } from "./git.mjs";
 import { isUnder, resolveDir, resolveThroughAncestor } from "./paths.mjs";
 import { scopeDirs } from "./sources.mjs";
-import { readAllowedDirs } from "./transcript.mjs";
+import { readAllowedDirs, readRelocatedDir } from "./transcript.mjs";
 
 const pass = (why) => ({ action: "pass", why });
 
@@ -47,13 +48,30 @@ function isTranscript(resolved, configDir) {
   return resolved.endsWith(".jsonl") && isUnder(resolved, projects);
 }
 
-export function allowedDirsFor({ input, env, config, sessionRoot, readDirs = readAllowedDirs, readScope = scopeDirs, deps = {} }) {
+export function allowedDirsFor({ input, env, config, sessionRoot, readDirs = readAllowedDirs, readScope = scopeDirs, readRelocated = readRelocatedDir, deps = {} }) {
   if (config.readTranscript) {
     const t = readDirs(input?.transcript_path);
-    if (t.ok) return { ...t, via: "transcript" };
-    return { ...readScope({ env, input, sessionRoot, deps }), transcriptReason: t.reason };
+    const base = t.ok ? { ...t, via: "transcript" } : { ...readScope({ env, input, sessionRoot, deps }), transcriptReason: t.reason };
+    return withRelocated(base, input, env, readRelocated);
   }
   return readScope({ env, input, sessionRoot, deps });
+}
+
+function withRelocated(allowed, input, env, readRelocated) {
+  const path = input?.transcript_path;
+  if (!allowed.ok || typeof path !== "string" || !isAbsolute(path)) return allowed;
+  let resolved;
+  try {
+    resolved = realpathSync.native(path);
+  } catch {
+    return allowed;
+  }
+  const configDir = resolveDir(configDirOf(env));
+  if (!configDir || !isTranscript(resolved, configDir)) return allowed;
+  const dir = readRelocated(resolved, input?.session_id);
+  if (!dir) return allowed;
+  const sources = [...(allowed.sources || []), { source: "/cd", dir }];
+  return { ...allowed, dirs: allowed.dirs.includes(dir) ? allowed.dirs : [...allowed.dirs, dir], sources };
 }
 
 function judge(raw, { input, env, config, git, readDirs, readScope, cwd, sessionInfo, deps }) {

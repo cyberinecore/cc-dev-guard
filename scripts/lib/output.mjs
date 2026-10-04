@@ -8,6 +8,7 @@ const repoConfigFile = REPO_CONFIG_FILE;
 const retryMinutes = RETRY_WINDOW_MS / 60000;
 
 const ALWAYS_ASK = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected", "invalid-path", "unresolvable"]);
+export const GUARDED_FILE_WHYS = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected"]);
 
 function decision(permissionDecision, reason) {
   return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason: reason } };
