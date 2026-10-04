@@ -14,6 +14,7 @@ What happens when devguard itself cannot run. Measured with `tests/live/failures
 | hook prints something that is not JSON | FAILS OPEN, silently | nothing in the debug log |
 | hook exits 2 | blocked | debug log: hook error with stderr |
 | hook exceeds its timeout | FAILS OPEN | debug log: `timed out after 2000ms` (probe used a 2 s timeout) |
+| Claude Code cannot evaluate the matcher, or cannot serialize the tool input to JSON (2.1.288 and later) | blocked by Claude Code before the hook runs; on 2.1.287 and earlier the hook was skipped and the call ran | not reproduced live: Claude Code 2.1.288 changelog ("the call is now blocked"), and the `hook_match_failed` string, absent from the 2.1.287 binary and present in 2.1.288 and 2.1.289 |
 
 The same rows hold for the Bash hook and `danger_guard` (D34): an engine that fails to load answers ask, or deny under bypassPermissions, for every Bash call, so a broken install shows at once as every command being held; the fail-open rows let a data-destroying command run. Keep settings `deny` rules for commands you never want as a second layer outside bypassPermissions.
 

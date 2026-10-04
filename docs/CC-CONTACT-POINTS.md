@@ -20,6 +20,9 @@ Every place where this plugin depends on Claude Code behaviour. `cc-plugin-compa
 | Harness behaviour: ask is not honoured under bypassPermissions, so ask is sent as deny | scripts/lib/output.mjs, docs/LIVE-MATRIX.md | | if Claude Code starts honouring ask under bypass, deny becomes over-strict |
 | `CLAUDE_PROJECT_DIR` stays on the launch directory after a Bash `cd` and after `/cd` (D12) | scripts/lib/decide.mjs `sessionRootOf` | | the session repository moves with the working directory |
 | `/cd` fires no hook (`CwdChanged`, `UserPromptSubmit`, `UserPromptExpansion` all silent, 2.1.289); the transcript moves to the new project folder and starts with a `relocated` record | README Limits, docs/LIVE-MATRIX.md `/cd` rows | | a new event would let devguard follow a user's `/cd` |
+| `/cd` writes a new transcript under the target's projects folder whose first line is `{"type":"relocated","relocatedCwd":...}` (2.1.289); the planned signal for following a user `/cd` (task krx46) | docs/LIVE-MATRIX.md `/cd` rows | | the record moves or changes shape; a /cd follow-up built on it stops matching |
+| Settings files list hooks as `hooks.<Event>[].hooks[]` with `command` or `url`; cyberine-worktree scans them for other WorktreeCreate hooks | plugins/cyberine-worktree/scripts/session-start.mjs | | the session-start warning about a competing WorktreeCreate hook goes silent |
+| A machine serving a cloud session does not use the folder's hooks and plugin settings, and the session keeps the settings the user accepted (strings new in 2.1.288) | hooks/hooks.json, scripts/lib/sources.mjs | | a project-scoped install gives no guard on a self-hosted runner; on-disk `additionalDirectories` can differ from what the cloud session uses |
 | Env `CLAUDE_PROJECT_DIR`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_CONFIG_DIR`, `CLAUDE_PID`, `CLAUDE_JOB_DIR`, `CLAUDE_COWORK_MEMORY_PATH_OVERRIDE` | scripts/lib/*.mjs | | session root, records or Claude Code's own folders resolve wrong |
 | Claude Code's own folders: `<config>/plans`, `<config>/projects/<slug>/memory` layout | scripts/lib/allowances.mjs | | memory and plan writes get asked |
 | Settings `permissions.additionalDirectories` (user, project, local, managed paths) | scripts/lib/sources.mjs | | allowed directories are missed |
@@ -30,4 +33,4 @@ Every place where this plugin depends on Claude Code behaviour. `cc-plugin-compa
 | Manifest keys (`displayName`, `privacyPolicyUrl`, `$schema`, `keywords`) | both plugin.json | | install, listing or strict validation fails |
 | Marketplace entries, `source` `./` and `./plugins/cyberine-worktree`, `category` | .claude-plugin/marketplace.json | | install fails |
 
-Last verified: 2.1.289 (Claude Code), 2026-10-04 (`/cd` rows only; full release check pending)
+Last verified: 2.1.289 (Claude Code), 2026-10-04
