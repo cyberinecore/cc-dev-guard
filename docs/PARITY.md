@@ -52,5 +52,6 @@ Intended divergences since D37 (task km5zk), covered by `DEVGUARD_ALLOWS` and `D
 | `truncate` followed by a table name, any case (`truncate users;`, `TRUNCATE TABLE x`, `truncate a, b`) | denies | denies | unchanged |
 | `rm -rf "$(mktemp -d)"`, the whole argument one substitution of `mktemp` with flags and a template | denies (unresolved substitution) | passes | a directory the same command just created in the temp folder |
 | `rm -rf "$(mktemp -d)"/*`, `.../..`, or a substitution running anything besides `mktemp` | denies | denies | unchanged |
+| `rm -rf <CLAUDE_CONFIG_DIR>/jobs/<id>/...` with `CLAUDE_CONFIG_DIR` absolute and not `$HOME` (D39) | denies | passes | the profile’s own job dir, the same as `~/.claude/jobs/` |
 
 The deny reasons differ on purpose: devguard drops the personal pointers (`settings.json deny list`, the 2026-03-24 incident, `~/.claude/rules/safety.md`) and names `CY_ALLOW_DANGER` or the `allow_danger_env` variable as the escape.

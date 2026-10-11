@@ -232,9 +232,9 @@ function stripCommentLines(cmd) {
     .join("\n");
 }
 
-export function dangerReason(command, { home = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true } = {}) {
+export function dangerReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true } = {}) {
   if (typeof command !== "string" || command === "") return "";
-  const opts = { home, protectedBranches: new Set(protectedBranches), awsS3 };
+  const opts = { home, configDir, protectedBranches: new Set(protectedBranches), awsS3 };
   return guardDepth(command, 0, opts);
 }
 
@@ -286,7 +286,7 @@ function gitPushReason(cmd, { protectedBranches }) {
   return "";
 }
 
-function rmReason(cmd, { home }) {
+function rmReason(cmd, { home, configDir }) {
   for (const m of cmd.matchAll(reRm)) {
     let recursive = false;
     const targets = [];
@@ -304,7 +304,7 @@ function rmReason(cmd, { home }) {
     }
     if (!recursive) continue;
     for (const t of targets) {
-      const r = rmTargetReason(t, home);
+      const r = rmTargetReason(t, home, configDir);
       if (r) return r;
     }
   }
@@ -313,23 +313,25 @@ function rmReason(cmd, { home }) {
 
 const VAR_OK = ["$CLAUDE_JOB_DIR", "$TMPDIR", "${CLAUDE_JOB_DIR", "${TMPDIR"];
 
-function rmTargetReason(raw, home) {
+function rmTargetReason(raw, home, configDir) {
   const t = raw.replace(/^["']+|["']+$/g, "");
   if (t === "") return "";
   if (t.startsWith("$") && !VAR_OK.some((p) => t.startsWith(p))) return `recursive rm of \`${raw}\` is denied: the target is a shell variable the guard cannot resolve; write the literal path.`;
-  if (t === "*" || t === "." || t === ".." || t === "/" || t === "~" || t === "~/" || t.startsWith("../") || (t.endsWith("/*") && (t.startsWith("/") || t.startsWith("~")) && !isTmpPath(t, home))) return `recursive rm of \`${raw}\` is denied.`;
+  if (t === "*" || t === "." || t === ".." || t === "/" || t === "~" || t === "~/" || t.startsWith("../") || (t.endsWith("/*") && (t.startsWith("/") || t.startsWith("~")) && !isTmpPath(t, home, configDir))) return `recursive rm of \`${raw}\` is denied.`;
   const base = baseName(t.endsWith("/") ? t.slice(0, -1) : t);
-  if (REGENERABLE_DIRS.has(base) || isTmpPath(t, home) || t.includes("/.claude/worktrees/")) return "";
+  if (REGENERABLE_DIRS.has(base) || isTmpPath(t, home, configDir) || t.includes("/.claude/worktrees/")) return "";
   if (!t.startsWith("/") && !t.startsWith("~") && !t.startsWith("$")) return "";
   const expanded = t.startsWith("~") ? home + t.slice(1) : t;
   if (home && (expanded === home || expanded === home + "/")) return "recursive rm of the home directory is denied.";
   return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, and regenerable build/cache dirs are allowed).`;
 }
 
-function isTmpPath(t, home) {
+function isTmpPath(t, home, configDir = "") {
   if (t === ".." || t.startsWith("../") || t.endsWith("/..") || t.includes("/../")) return false;
   if (reMacTmpDir.test(t)) return true;
   const prefixes = ["/tmp/", "/private/tmp/", "/var/tmp/", "/private/var/tmp/", "$TMPDIR", "${TMPDIR", "$CLAUDE_JOB_DIR", "${CLAUDE_JOB_DIR", "~/.claude/jobs/"];
   if (home) prefixes.push(home + "/.claude/jobs/");
+  const cfg = configDir.replace(/\/+$/, "");
+  if (cfg.startsWith("/") && cfg !== home) prefixes.push(cfg + "/jobs/");
   return prefixes.some((p) => t.startsWith(p));
 }

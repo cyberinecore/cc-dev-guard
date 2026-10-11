@@ -100,3 +100,11 @@ test("the danger check runs before the write-shape check", () => {
   const out = bash(a, "rm -rf /opt/app", isolatedEnv());
   assert.match(out.hookSpecificOutput.permissionDecisionReason, /recursive rm of absolute path `\/opt\/app` is denied/);
 });
+
+test("the hook reads CLAUDE_CONFIG_DIR, so a profile session can clear its own expanded job dir", () => {
+  const a = session();
+  const cfg = "/Users/devguard-test/.claude-profiles/ktt";
+  const target = `rm -rf ${cfg}/jobs/abc123/tmp/x`;
+  assert.equal(bash(a, target, isolatedEnv({ CLAUDE_CONFIG_DIR: cfg })), null);
+  assert.equal(decisionOf(bash(a, target, isolatedEnv({}))), "deny");
+});

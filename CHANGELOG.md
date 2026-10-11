@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.7.1] - 2026-10-12
+
+- `danger_guard` lets a recursive `rm` under `<CLAUDE_CONFIG_DIR>/jobs/` through, the same as `~/.claude/jobs/`, so a session run under a per-account config dir can clear its own expanded `CLAUDE_JOB_DIR`. Only when `CLAUDE_CONFIG_DIR` is set, absolute and not `$HOME`; other paths under it stay denied (D39).
+
 ## [0.7.0] - 2026-10-04
 
 - With `read_transcript` on, a `/cd` into another repository is followed: the directory of the latest `/cd` becomes an allowed directory, so writes there no longer ask. Claude Code fires no hook for `/cd`, so this reads the `relocated` record Claude Code writes into the transcript; a `cd` inside a Bash command never widens the scope, and with `read_transcript` off nothing changes (`/add-dir` still works everywhere) (D38).

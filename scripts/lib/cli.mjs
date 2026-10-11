@@ -133,7 +133,7 @@ function escapeOpen(env, config, sessionRoot) {
 
 function dangerCheck(command, { env, config, sessionRoot, home }) {
   if (!config.dangerGuard) return null;
-  const reason = dangerReason(command, { home, protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes });
+  const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes });
   if (!reason) return null;
   const escape = escapeOpen(env, config, sessionRoot);
   if (escape.open) return null;
