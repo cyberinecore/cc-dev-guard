@@ -8,7 +8,7 @@ const reSQLTruncate = /\btruncate\s+(?:table\s+|only\s+)?(?:"[^"]+"|`[^`]+`|[A-Z
 const reHeredoc = /(?<!<)<<(-?)\s*(['"]?)([A-Za-z_][\w.-]*)\2/g;
 const reBareMktemp = /(["']?)\$\(mktemp(?:\s+[-\w./]+)*\s*\)\1(?=\s|$)/g;
 const reTerraformDestroy = /\bterraform\s+(?:[-\w]+\s+)*?destroy\b/;
-const reKubectlDelete = /\bkubectl\s+(?:[-\w]+\s+)*?delete\s+(?:[-\w]+\s+)*?(namespace|ns|pv|pvc|--all|-A)\b/;
+const reKubectlDelete = /\bkubectl\s+(?:[-\w]+\s+)*?delete\s+(?:[-\w]+\s+)*?(namespace|ns|pv|pvc|statefulsets?|sts|--all|-A)\b/;
 const reDockerPrune = /\bdocker\s+(system\s+prune|volume\s+(rm|prune))\b/;
 const reComposeDownV = /\bdocker\s+compose\b[^\n;&|]*\bdown\b[^\n;&|]*(\s-v\b|\s--volumes\b)/;
 const reGitResetHard = /\bgit\s+(?:-C\s+\S+\s+)?reset\s+(?:[-\w]+\s+)*?--hard\b/;
@@ -17,7 +17,36 @@ const reGitClean = /\bgit\s+(?:-C\s+\S+\s+)?clean\s+(?:[-\w]+\s+)*?-[a-zA-Z]*f/;
 const reGitPush = /\bgit\s+(?:-C\s+\S+\s+)?push\b([^\n;&|]*)/g;
 const reForceFlag = /(^|\s)(--force|-f|-[a-eg-zA-Z]*f[a-zA-Z]*)(\s|$)/;
 const reMacTmpDir = /^(\/private)?\/var\/folders\/[^/]+\/[^/]+\/T\/[^/]/;
-const reRm = /(^|\s|;|&&|\|\|)\s*(sudo\s+)?rm\s+([^\n;&|]*)/g;
+const reRm = /(^|\s|;|&&|\|\|)\s*(sudo\s+)?(?:\\|[^\s;&|]*\/)?rm\s+([^\n;&|]*)/g;
+const reFind = /(^|\s|;|&&|\|\|)\s*(?:sudo\s+)?(?:[^\s;&|]*\/)?find\s+([^\n;&|]*)/g;
+const reRmBin = /^(?:\\|[^\s;&|]*\/)?rm$/;
+const reDropdb = /(^|\s|\/)dropdb(?:\s|$)/;
+const reMysqladminDrop = /\bmysqladmin\s+(?:\S+\s+)*?drop\b/;
+const reRedisFlush = /\bredis-cli\b[^\n;&|]*\bflush(?:all|db)\b/i;
+const reBareFlush = /^\s*flush(?:all|db)(?:\s+(?:async|sync))?\s*$/i;
+const reMongoShell = /(^|\s|\/)mongo(?:sh)?\s/;
+const reMongoDestroy = /\.dropDatabase\s*\(|\.drop\s*\(|\.(?:deleteMany|remove)\s*\(\s*\{\s*\}\s*\)/;
+const reBareMongo = /^\s*db(?:\.\w+|\[[^\]]+\])*\.(?:dropDatabase\s*\(|drop\s*\(|(?:deleteMany|remove)\s*\(\s*\{\s*\}\s*\))/;
+const rePrismaReset = /\bprisma\s+(?:\S+\s+)*?(?:migrate\s+reset\b|db\s+push\b[^\n;&|]*\s--force-reset\b)/;
+const reRailsDrop = /\b(?:rails|rake)\s+(?:\S+\s+)*?db:(?:drop|reset|schema:load)\b/;
+const reArtisanFresh = /\bartisan\s+(?:\S+\s+)*?(?:migrate:fresh|db:wipe)\b/;
+const reSequelizeDrop = /\bsequelize(?:-cli)?\s+(?:\S+\s+)*?db:drop\b/;
+const reTypeormDrop = /\btypeorm\s+(?:\S+\s+)*?schema:drop\b/;
+const reWranglerD1 = /\bwrangler\s+(?:\S+\s+)*?d1\s+delete\b/;
+const reAwsRds = /\baws\s+(?:\S+\s+)*?rds\s+delete-db-(?:instance|cluster)\b/;
+const reAwsDynamo = /\baws\s+(?:\S+\s+)*?dynamodb\s+delete-table\b/;
+const reAzSqlDb = /\baz\s+(?:\S+\s+)*?sql\s+db\s+delete\b/;
+const reAzCosmos = /\baz\s+(?:\S+\s+)*?cosmosdb\b[^\n;&|]*\sdelete\b/;
+const reGcloudSql = /\bgcloud\s+(?:\S+\s+)*?sql\s+(?:instances|databases)\s+delete\b/;
+const reDockerRm = /\bdocker\s+(?:-\S+\s+)*(?:container\s+|compose\s+(?:\S+\s+)*?)?rm\s+([^\n;&|]*)/;
+const reVolumesFlag = /(^|\s)(--volumes|-[a-zA-Z]*v[a-zA-Z]*)(\s|$)/;
+const reSQLDelete = /\bDELETE\s+FROM\s+(?:ONLY\s+)?(?:"[^"]+"|`[^`]+`|\[[^\]]+\]|[A-Za-z_][\w.$]*)/gi;
+const reDdDevice = /\bdd\b[^\n;&|]*\sof=["']?\/dev\/(?!(?:null|zero|full|random|urandom|stdout|stderr)\b|tty|fd\/)/;
+const reMkfs = /(^|\s|\/)(?:mkfs(?:\.[\w-]+)?|wipefs)\s/;
+const reGitBranch = /\bgit\s+(?:-C\s+\S+\s+)?branch\s+([^\n;&|]*)/;
+const reBranchDeleteD = /(^|\s)-[a-zA-Z]*D[a-zA-Z]*(\s|$)/;
+const reBranchDelete = /(^|\s)(--delete|-[a-zA-Z]*d[a-zA-Z]*)(\s|$)/;
+const reGitStashClear = /\bgit\s+(?:-C\s+\S+\s+)?stash\s+clear\b/;
 
 const REGENERABLE_DIRS = new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", "target", "__pycache__", ".pytest_cache", ".mypy_cache", ".venv", "venv", ".parcel-cache", ".vite", ".svelte-kit", "tmp", ".tmp", "temp", ".DS_Store"]);
 const TEXT_TOOLS = new Set(["echo", "printf", "grep", "rg", "egrep", "fgrep", "ugrep", "sed", "awk", "cat", "head", "tail", "less", "more", "wc", "sort", "uniq", "cut", "tr", "diff", "comm", "tee", "jq", "yq", "column", "fold", "nl", "od", "xxd"]);
@@ -240,10 +269,12 @@ export function dangerReason(command, { home = "", configDir = "", protectedBran
 
 function guardDepth(cmd, depth, opts) {
   if (depth > 3) return "";
+  const scans = [];
   for (const sub of splitSubcommands(stripCommentLines(stripTextHeredocs(cmd)))) {
     if (isTextOnly(sub)) continue;
     const [bin] = firstBin(sub);
     const scan = QUOTED_ARG_BINS.has(bin) ? stripQuotedArgs(sub) : sub;
+    scans.push(scan);
     const r = subcommandReason(scan, opts);
     if (r) return r;
     if (isWrapper(sub)) {
@@ -253,17 +284,92 @@ function guardDepth(cmd, depth, opts) {
       }
     }
   }
-  return "";
+  return sqlDeleteReason(scans.join("\n"));
 }
 
 function subcommandReason(s, opts) {
   if (opts.awsS3 && (reAwsS3Delete.test(s) || reAwsS3ApiDel.test(s))) return "`aws s3 rm/rb` and `aws s3api delete-*` are denied (they delete buckets or objects).";
   if (reSQLDrop.test(s) || reSQLTruncate.test(s)) return "DROP DATABASE/SCHEMA/TABLE and TRUNCATE are denied.";
   if (reTerraformDestroy.test(s)) return "`terraform destroy` is denied.";
-  if (reKubectlDelete.test(s)) return "`kubectl delete` of a namespace, pv/pvc, or --all is denied.";
+  if (reKubectlDelete.test(s)) return "`kubectl delete` of a namespace, pv/pvc, statefulset, or --all is denied.";
   if (reDockerPrune.test(s) || reComposeDownV.test(s)) return "`docker system prune`, `docker volume rm/prune` and `docker compose down -v` are denied (they delete volumes).";
   if (reGitResetHard.test(s) || reGitDiscard.test(s) || reGitClean.test(s)) return "`git reset --hard`, `git checkout -- .`, `git restore .` and `git clean -f` discard uncommitted work; denied.";
-  return gitPushReason(s, opts) || rmReason(s, opts) || "";
+  if (reGitStashClear.test(s)) return "`git stash clear` drops every stash entry; denied.";
+  if (reDropdb.test(s) || reMysqladminDrop.test(s)) return "`dropdb` and `mysqladmin drop` are denied (they delete a database).";
+  if (reRedisFlush.test(s) || reBareFlush.test(s)) return "`redis-cli FLUSHALL`/`FLUSHDB` is denied (it deletes every key).";
+  if ((reMongoShell.test(s) && reMongoDestroy.test(s)) || reBareMongo.test(s)) return "`dropDatabase()`, `.drop()`, `deleteMany({})` and `remove({})` in a mongo shell are denied (they delete a database or collection).";
+  if (rePrismaReset.test(s) || reRailsDrop.test(s) || reArtisanFresh.test(s) || reSequelizeDrop.test(s) || reTypeormDrop.test(s)) return "database resets through an ORM CLI (`prisma migrate reset`, `prisma db push --force-reset`, `rails db:drop`/`db:reset`/`db:schema:load`, `rake db:drop`, `artisan migrate:fresh`/`db:wipe`, `sequelize db:drop`, `typeorm schema:drop`) are denied.";
+  if (reWranglerD1.test(s) || reAwsRds.test(s) || reAwsDynamo.test(s) || reAzSqlDb.test(s) || reAzCosmos.test(s) || reGcloudSql.test(s)) return "deleting a managed database (`wrangler d1 delete`, `aws rds delete-db-instance`/`delete-db-cluster`, `aws dynamodb delete-table`, `az sql db delete`, `az cosmosdb ... delete`, `gcloud sql instances/databases delete`) is denied.";
+  if (reDdDevice.test(s) || reMkfs.test(s)) return "`dd of=/dev/<device>`, `mkfs` and `wipefs` are denied (they overwrite a block device).";
+  return dockerRmReason(s) || gitBranchReason(s, opts) || gitPushReason(s, opts) || findReason(s, opts) || rmReason(s, opts) || "";
+}
+
+function sqlDeleteReason(cmd) {
+  for (const m of cmd.matchAll(reSQLDelete)) {
+    const end = cmd.indexOf(";", m.index);
+    const statement = cmd.slice(m.index, end < 0 ? cmd.length : end);
+    if (!/\bWHERE\b/i.test(statement)) return "`DELETE FROM` without a `WHERE` clause is denied (it empties the table).";
+  }
+  return "";
+}
+
+function dockerRmReason(cmd) {
+  const m = reDockerRm.exec(cmd);
+  if (m && reVolumesFlag.test(m[1])) return "`docker rm -v`/`--volumes` is denied (it deletes the container's volumes).";
+  return "";
+}
+
+function gitBranchReason(cmd, { protectedBranches }) {
+  const m = reGitBranch.exec(cmd);
+  if (!m) return "";
+  const args = m[1];
+  if (!reBranchDeleteD.test(args) && !(reBranchDelete.test(args) && reForceFlag.test(args))) return "";
+  for (const t of fields(m[1])) {
+    if (!t.startsWith("-") && protectedBranches.has(t)) return `\`git branch -D\` of protected branch \`${t}\` is denied.`;
+  }
+  return "";
+}
+
+function findReason(cmd, { home, configDir }) {
+  for (const m of cmd.matchAll(reFind)) {
+    const toks = fields(m[2]);
+    const roots = [];
+    let i = 0;
+    for (; i < toks.length; i++) {
+      const t = toks[i];
+      if (t === "-H" || t === "-L" || t === "-P" || /^-O\d*$/.test(t)) continue;
+      if (t === "-D") {
+        i++;
+        continue;
+      }
+      if (t.startsWith("-") || t === "!" || t === "(" || t === "\\(") break;
+      roots.push(t);
+    }
+    if (!roots.length) roots.push(".");
+    let destructive = "";
+    for (; i < toks.length; i++) {
+      if (toks[i] === "-delete") destructive = "-delete";
+      if ((toks[i] === "-exec" || toks[i] === "-execdir") && recursiveRmAt(toks, i + 1)) destructive = toks[i] + " rm -r";
+    }
+    if (!destructive) continue;
+    for (const root of roots) {
+      if (root === ".") continue;
+      const r = rmTargetReason(root, home, configDir);
+      if (r) return `\`find ${root} ... ${destructive}\` is denied (${r.replace(/\.$/, "")}).`;
+    }
+  }
+  return "";
+}
+
+function recursiveRmAt(toks, i) {
+  if (toks[i] === "sudo") i++;
+  if (!reRmBin.test(toks[i] || "")) return false;
+  for (let j = i + 1; j < toks.length; j++) {
+    const t = toks[j];
+    if (t === "{}" || t === ";" || t === "\\;" || t === "+") break;
+    if (t === "--recursive" || (/^-[a-zA-Z]+$/.test(t) && /[rR]/.test(t))) return true;
+  }
+  return false;
 }
 
 function gitPushReason(cmd, { protectedBranches }) {
@@ -303,6 +409,7 @@ function rmReason(cmd, { home, configDir }) {
       targets.push(t);
     }
     if (!recursive) continue;
+    if (leadingBin(cmd.slice(0, m.index)) === "xargs") return "recursive rm through `xargs` is denied: the targets come from stdin and cannot be resolved; write the literal paths.";
     for (const t of targets) {
       const r = rmTargetReason(t, home, configDir);
       if (r) return r;
@@ -319,6 +426,7 @@ function rmTargetReason(raw, home, configDir) {
   if (t.startsWith("$") && !VAR_OK.some((p) => t.startsWith(p))) return `recursive rm of \`${raw}\` is denied: the target is a shell variable the guard cannot resolve; write the literal path.`;
   if (t === "*" || t === "." || t === ".." || t === "/" || t === "~" || t === "~/" || t.startsWith("../") || (t.endsWith("/*") && (t.startsWith("/") || t.startsWith("~")) && !isTmpPath(t, home, configDir))) return `recursive rm of \`${raw}\` is denied.`;
   const base = baseName(t.endsWith("/") ? t.slice(0, -1) : t);
+  if (base === ".git") return `recursive rm of \`${raw}\` is denied (it destroys the repository's history).`;
   if (REGENERABLE_DIRS.has(base) || isTmpPath(t, home, configDir) || t.includes("/.claude/worktrees/")) return "";
   if (!t.startsWith("/") && !t.startsWith("~") && !t.startsWith("$")) return "";
   const expanded = t.startsWith("~") ? home + t.slice(1) : t;

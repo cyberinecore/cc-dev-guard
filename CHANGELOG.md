@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.8.0] - 2026-10-12
+
+- `danger_guard` closes gaps found by probing it with real destructive commands, every one of which passed before (D40): `rm` reached as `\rm`, `/bin/rm` or any other path; `find <root> ... -delete` and `find <root> ... -exec rm -r` with the root judged like a recursive `rm` target; recursive `rm` fed by `xargs`; recursive `rm` of a `.git` directory anywhere; `dropdb`, `mysqladmin drop`, `redis-cli FLUSHALL`/`FLUSHDB`, `dropDatabase()`/`.drop()`/`deleteMany({})`/`remove({})` in a mongo shell; ORM resets (`prisma migrate reset`, `prisma db push --force-reset`, `rails`/`rake db:drop`/`db:reset`/`db:schema:load`, `artisan migrate:fresh`/`db:wipe`, `sequelize db:drop`, `typeorm schema:drop`); managed database deletes (`wrangler d1 delete`, `aws rds delete-db-instance`/`delete-db-cluster`, `aws dynamodb delete-table`, `az sql db delete`, `az cosmosdb ... delete`, `gcloud sql instances`/`databases delete`); `docker rm -v`, `kubectl delete statefulset`; `DELETE FROM <table>` with no `WHERE` in the statement; `dd of=/dev/<device>`, `mkfs`, `wipefs`; `git branch -D` of a protected branch and `git stash clear`. Every rule runs through the same wrapper unwrapping (`bash -c`, `ssh`, `sudo`, `xargs`, `docker exec` and the rest, three levels deep) and the same text-only skips, so `echo`, `grep`, comments and `git commit -m` messages still pass.
+- README names two known gaps of `danger_guard`: SQL read from a file (`mysql app < x.sql`, `psql -f x.sql`) and a delete written as code in `python -c`/`node -e`.
+
 ## [0.7.1] - 2026-10-12
 
 - `danger_guard` lets a recursive `rm` under `<CLAUDE_CONFIG_DIR>/jobs/` through, the same as `~/.claude/jobs/`, so a session run under a per-account config dir can clear its own expanded `CLAUDE_JOB_DIR`. Only when `CLAUDE_CONFIG_DIR` is set, absolute and not `$HOME`; other paths under it stay denied (D39).
