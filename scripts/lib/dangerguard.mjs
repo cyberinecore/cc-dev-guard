@@ -48,7 +48,9 @@ const reBranchDeleteD = /(^|\s)-[a-zA-Z]*D[a-zA-Z]*(\s|$)/;
 const reBranchDelete = /(^|\s)(--delete|-[a-zA-Z]*d[a-zA-Z]*)(\s|$)/;
 const reGitStashClear = /\bgit\s+(?:-C\s+\S+\s+)?stash\s+clear\b/;
 
-const REGENERABLE_DIRS = new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", "target", "__pycache__", ".pytest_cache", ".mypy_cache", ".venv", "venv", ".parcel-cache", ".vite", ".svelte-kit", "tmp", ".tmp", "temp", ".DS_Store"]);
+const reTagMention = /cachedir\.tag/i;
+const TAG_WRITE_BINS = new Set(["cp", "mv", "ln", "install", "rsync", "ditto", "tar", "unzip", "dd", "tee", "touch", "curl", "wget", "scp"]);
+const REGENERABLE_DIRS =new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", "target", "__pycache__", ".pytest_cache", ".mypy_cache", ".venv", "venv", ".parcel-cache", ".vite", ".svelte-kit", "tmp", ".tmp", "temp", ".DS_Store"]);
 const TEXT_TOOLS = new Set(["echo", "printf", "grep", "rg", "egrep", "fgrep", "ugrep", "sed", "awk", "cat", "head", "tail", "less", "more", "wc", "sort", "uniq", "cut", "tr", "diff", "comm", "tee", "jq", "yq", "column", "fold", "nl", "od", "xxd"]);
 const GIT_TEXT_SUBCOMMANDS = new Set(["log", "grep", "show", "diff", "blame"]);
 const WRAPPER_BINS = new Set(["ssh", "bash", "sh", "zsh", "eval", "xargs", "sudo", "nohup", "timeout", "gtimeout", "caffeinate", "env", "script"]);
@@ -261,10 +263,30 @@ function stripCommentLines(cmd) {
     .join("\n");
 }
 
-export function dangerReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true } = {}) {
+export function dangerReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true, isCacheDir = null } = {}) {
   if (typeof command !== "string" || command === "") return "";
-  const opts = { home, configDir, protectedBranches: new Set(protectedBranches), awsS3 };
-  return guardDepth(command, 0, opts);
+  const opts = { home, configDir, protectedBranches: new Set(protectedBranches), awsS3, isCacheDir };
+  return tagWriteShapeReason(command) || guardDepth(command, 0, opts);
+}
+
+export const TAG_WRITE_REASON = "writing a CACHEDIR.TAG file is denied: danger_guard lets a recursive rm through for a directory that carries one, so only the tool that owns the cache may create it.";
+
+export function isCacheDirTagPath(path) {
+  return typeof path === "string" && baseName(path.replace(/\\/g, "/")).toUpperCase() === "CACHEDIR.TAG";
+}
+
+function tagWriteShapeReason(cmd) {
+  for (const sub of splitSubcommands(stripCommentLines(stripTextHeredocs(cmd)))) {
+    if (!reTagMention.test(sub)) continue;
+    const [bin] = firstBin(sub);
+    if (unquotedRedirect(sub) || TAG_WRITE_BINS.has(bin)) return TAG_WRITE_REASON;
+  }
+  return "";
+}
+
+function unquotedRedirect(sub) {
+  for (let i = sub.indexOf(">"); i >= 0; i = sub.indexOf(">", i + 1)) if (unquotedAt(sub, i)) return true;
+  return false;
 }
 
 function guardDepth(cmd, depth, opts) {
@@ -330,7 +352,7 @@ function gitBranchReason(cmd, { protectedBranches }) {
   return "";
 }
 
-function findReason(cmd, { home, configDir }) {
+function findReason(cmd, opts) {
   for (const m of cmd.matchAll(reFind)) {
     const toks = fields(m[2]);
     const roots = [];
@@ -354,7 +376,7 @@ function findReason(cmd, { home, configDir }) {
     if (!destructive) continue;
     for (const root of roots) {
       if (root === ".") continue;
-      const r = rmTargetReason(root, home, configDir);
+      const r = rmTargetReason(root, opts);
       if (r) return `\`find ${root} ... ${destructive}\` is denied (${r.replace(/\.$/, "")}).`;
     }
   }
@@ -392,7 +414,7 @@ function gitPushReason(cmd, { protectedBranches }) {
   return "";
 }
 
-function rmReason(cmd, { home, configDir }) {
+function rmReason(cmd, opts) {
   for (const m of cmd.matchAll(reRm)) {
     let recursive = false;
     const targets = [];
@@ -411,7 +433,7 @@ function rmReason(cmd, { home, configDir }) {
     if (!recursive) continue;
     if (leadingBin(cmd.slice(0, m.index)) === "xargs") return "recursive rm through `xargs` is denied: the targets come from stdin and cannot be resolved; write the literal paths.";
     for (const t of targets) {
-      const r = rmTargetReason(t, home, configDir);
+      const r = rmTargetReason(t, opts);
       if (r) return r;
     }
   }
@@ -420,7 +442,7 @@ function rmReason(cmd, { home, configDir }) {
 
 const VAR_OK = ["$CLAUDE_JOB_DIR", "$TMPDIR", "${CLAUDE_JOB_DIR", "${TMPDIR"];
 
-function rmTargetReason(raw, home, configDir) {
+function rmTargetReason(raw, { home, configDir, isCacheDir }) {
   const t = raw.replace(/^["']+|["']+$/g, "");
   if (t === "") return "";
   if (t.startsWith("$") && !VAR_OK.some((p) => t.startsWith(p))) return `recursive rm of \`${raw}\` is denied: the target is a shell variable the guard cannot resolve; write the literal path.`;
@@ -431,7 +453,14 @@ function rmTargetReason(raw, home, configDir) {
   if (!t.startsWith("/") && !t.startsWith("~") && !t.startsWith("$")) return "";
   const expanded = t.startsWith("~") ? home + t.slice(1) : t;
   if (home && (expanded === home || expanded === home + "/")) return "recursive rm of the home directory is denied.";
-  return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, and regenerable build/cache dirs are allowed).`;
+  if (isCacheDir && cacheDirCandidate(raw, expanded) && isCacheDir(expanded.replace(/\/+$/, ""))) return "";
+  return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, regenerable build/cache dirs and directories carrying a CACHEDIR.TAG are allowed).`;
+}
+
+function cacheDirCandidate(raw, expanded) {
+  if (/^["']/.test(raw) !== /["']$/.test(raw)) return false;
+  if (!expanded.startsWith("/") || /[*?[\]{}$`\\]/.test(expanded)) return false;
+  return !expanded.split("/").some((seg) => seg === "." || seg === ".." || seg === ".git");
 }
 
 function isTmpPath(t, home, configDir = "") {

@@ -11,7 +11,8 @@ import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
 import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
-import { dangerReason, ESCAPE_ENV } from "./dangerguard.mjs";
+import { isCacheDir } from "./cachedir.mjs";
+import { dangerReason, ESCAPE_ENV, isCacheDirTagPath, TAG_WRITE_REASON } from "./dangerguard.mjs";
 import { mcpWriteTargets } from "./mcpfs.mjs";
 import { GUARDED_FILE_WHYS, render, renderDanger, renderError, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
@@ -73,6 +74,8 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
     if (typeof input.tool_name === "string" && input.tool_name.startsWith("mcp__")) return mcpHook(input, env, deps, now);
     const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
     const config = loadConfig({ env, sessionRoot });
+    const tag = tagWriteCheck([input.tool_input?.file_path, input.tool_input?.notebook_path], { env, config, sessionRoot });
+    if (tag) return tag;
     if (config.mode === "off") return null;
     const verdict = (deps.decide || decide)(input, { sessionRoot, env, config });
     const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
@@ -133,7 +136,16 @@ function escapeOpen(env, config, sessionRoot) {
 
 function dangerCheck(command, { env, config, sessionRoot, home }) {
   if (!config.dangerGuard) return null;
-  const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes });
+  const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes, isCacheDir: (dir) => isCacheDir(dir, { home }) });
+  return dangerOut(reason, { env, config, sessionRoot });
+}
+
+function tagWriteCheck(paths, { env, config, sessionRoot }) {
+  if (!config.dangerGuard || !paths.some(isCacheDirTagPath)) return null;
+  return dangerOut(TAG_WRITE_REASON, { env, config, sessionRoot });
+}
+
+function dangerOut(reason, { env, config, sessionRoot }) {
   if (!reason) return null;
   const escape = escapeOpen(env, config, sessionRoot);
   if (escape.open) return null;
@@ -145,6 +157,8 @@ function mcpHook(input, env, deps, now) {
   if (!targets || !targets.length) return null;
   const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
   const config = loadConfig({ env, sessionRoot });
+  const tag = tagWriteCheck(targets.map((t) => t.path), { env, config, sessionRoot });
+  if (tag) return tag;
   if (config.mode === "off") return null;
   const git = deps.git || makeGit();
   for (const t of targets) {
