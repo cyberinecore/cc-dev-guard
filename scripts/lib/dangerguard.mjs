@@ -4,7 +4,12 @@ export const ESCAPE_ENV = "CY_ALLOW_DANGER";
 const reAwsS3Delete = /\baws\s+(?:[-\w]+\s+)*?s3\s+(rm|rb)\b/i;
 const reAwsS3ApiDel = /\baws\s+(?:[-\w]+\s+)*?s3api\s+delete-(bucket|object|objects)\b/i;
 const reSQLDrop = /\bDROP\s+(DATABASE|SCHEMA|TABLE)/i;
-const reSQLTruncate = /\btruncate\s+(?:table\s+|only\s+)?(?:"[^"]+"|`[^`]+`|[A-Za-z_][\w.$]*)(?=[\s;'"`)\\,/*]|--|$)/i;
+const sqlIdent = String.raw`(?:"[^"]+"|\`[^\`]+\`|[A-Za-z_][\w.$]*)`;
+const sqlIdentList = String.raw`${sqlIdent}(?:\s*,\s*${sqlIdent})*`;
+const sqlTruncateOption = String.raw`\s+(?:cascade|restrict|restart|continue)\b`;
+const reSQLTruncateTable = new RegExp(String.raw`\btruncate\s+table\s+(?:only\s+)?${sqlIdent}(?=[\s;'"\`)\\,/*]|--|$)`, "im");
+const reSQLTruncateLead = new RegExp(String.raw`(?:^|[;'"\`(]|\*/)\s*truncate\s+(?:only\s+)?${sqlIdentList}(?:\s*(?:[;'"\`)\\*]|--|/\*|$)|${sqlTruncateOption})`, "im");
+const reSQLTruncateEnd = new RegExp(String.raw`\btruncate\s+(?:only\s+)?${sqlIdentList}(?:\s*(?:[;\\*]|--|/\*|$)|${sqlTruncateOption})`, "im");
 const reHeredoc = /(?<!<)<<(-?)\s*(['"]?)([A-Za-z_][\w.-]*)\2/g;
 const reBareMktemp = /(["']?)\$\(mktemp(?:\s+[-\w./]+)*\s*\)\1(?=\s|$)/g;
 const reTerraformDestroy = /\bterraform\s+(?:[-\w]+\s+)*?destroy\b/;
@@ -311,7 +316,7 @@ function guardDepth(cmd, depth, opts) {
 
 function subcommandReason(s, opts) {
   if (opts.awsS3 && (reAwsS3Delete.test(s) || reAwsS3ApiDel.test(s))) return "`aws s3 rm/rb` and `aws s3api delete-*` are denied (they delete buckets or objects).";
-  if (reSQLDrop.test(s) || reSQLTruncate.test(s)) return "DROP DATABASE/SCHEMA/TABLE and TRUNCATE are denied.";
+  if (reSQLDrop.test(s) || reSQLTruncateTable.test(s) || reSQLTruncateLead.test(s) || reSQLTruncateEnd.test(s)) return "DROP DATABASE/SCHEMA/TABLE and TRUNCATE are denied.";
   if (reTerraformDestroy.test(s)) return "`terraform destroy` is denied.";
   if (reKubectlDelete.test(s)) return "`kubectl delete` of a namespace, pv/pvc, statefulset, or --all is denied.";
   if (reDockerPrune.test(s) || reComposeDownV.test(s)) return "`docker system prune`, `docker volume rm/prune` and `docker compose down -v` are denied (they delete volumes).";
