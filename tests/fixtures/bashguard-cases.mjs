@@ -109,6 +109,11 @@ export const DEVGUARD_ALLOWS = [
   "python3 -c \"print('<p class=\\\"truncate text-sm\\\">x</p>')\"",
   "node -e \"console.log('truncate overflow-hidden')\"",
   "python3 - <<'EOF'\nhtml = '<span class=\"truncate w-40\">'\nprint(html)\nEOF",
+  "python3 - <<'EOF'\nnote = \"Timeline writes truncate in place and failures are only logged\"\nprint(note)\nEOF",
+  "python3 -c \"print('writes truncate in place')\"",
+  "node -e \"console.log('never truncate the file before upload')\"",
+  "python3 -c \"print('Truncate long lines, then wrap them.')\"",
+  "python3 - <<'EOF'\nmsg = 'we truncate logs at 80 columns and keep the rest'\nprint(msg)\nEOF",
   "rm -rf \"$(mktemp -d)\"",
   "rm -rf $(mktemp -d -t probe)",
 ];
@@ -155,4 +160,11 @@ export const DEVGUARD_DENIES = [
   "psql -c 'TRUNCATE public.sessions* CASCADE'",
   "docker exec db psql -c 'TRUNCATE users*'",
   "psql <<'EOF'\nTRUNCATE users*;\nEOF",
+  "psql -c 'select 1; truncate users'",
+  "psql -c 'TRUNCATE users RESTART IDENTITY'",
+  "psql -c 'truncate users ;'",
+  "psql -c '/* x */ truncate users'",
+  "psql -c \"DO \\$\\$ BEGIN truncate users; END \\$\\$\"",
+  "mysql -e \"TRUNCATE TABLE sessions\"",
+  "psql <<'EOF'\nBEGIN;\n  truncate users\nCOMMIT;\nEOF",
 ];

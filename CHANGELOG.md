@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.9.1] - 2026-10-17
+
+- `danger_guard` no longer denies the English word "truncate" in prose that a scanned command carries, such as a Python string in a `python3 - <<'EOF'` heredoc ("writes truncate in place"). A `TRUNCATE` is now denied when it reads as a statement: `TRUNCATE TABLE <name>` anywhere; `truncate <names>` at the start of a statement (after the start of a line, `;`, a quote, `(` or `*/`) and followed by a statement end, quote, `)`, comment, `*` or a TRUNCATE option; or `truncate <names>` anywhere followed by `;`, the end of a line, a comment, `*` or a TRUNCATE option (D42).
+
 ## [0.9.0] - 2026-10-15
 
 - `danger_guard` lets a recursive `rm` (and `find ... -delete`) of an absolute or `~` path through when the directory carries a valid `CACHEDIR.TAG`, the cache-directory marker that cargo, SwiftPM, uv, tox, nox, ruff, pytest, mypy and npm's cache write (D41). The check reads the first 43 bytes of the tag on the directory's real path; the tag must be a regular file starting with the spec header. It never applies to `/`, `$HOME` or an ancestor of it, a path inside `.git`, a glob, a shell variable, a `.` or `..` segment, or a target with an unbalanced quote.

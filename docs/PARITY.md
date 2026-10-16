@@ -49,6 +49,7 @@ Intended divergences since D37 (task km5zk), covered by `DEVGUARD_ALLOWS` and `D
 | heredoc body received by `cat` or `tee` (inside `$(...)` only as a `git` argument), unquoted `<<`, no pipe, process substitution or line continuation, closing delimiter present, no `$(` or backtick under an unquoted delimiter (`cat > f.sql <<'EOF'`, a `git commit -m "$(cat <<'EOF' ...)"` message) | denies when the body names a dangerous command | passes | the body is file content, not a command |
 | any other heredoc (`psql`, `bash`, `ssh`, `awk`, piped onward, `<<<`, a quoted `'<<EOF'`, `bash -c "$(cat <<'EOF' ...)"`) | denies | denies | unchanged |
 | `truncate` followed by a word that continues with `-` (`python -c "print('truncate text-sm')"`) | denies | passes | a Tailwind class, not SQL |
+| `truncate` in prose, not at a statement start and not followed by a statement end (`python3 -c "print('writes truncate in place')"`, D42) | denies | passes | English, not SQL |
 | `truncate` followed by a table name, any case (`truncate users;`, `TRUNCATE TABLE x`, `truncate a, b`) | denies | denies | unchanged |
 | `rm -rf "$(mktemp -d)"`, the whole argument one substitution of `mktemp` with flags and a template | denies (unresolved substitution) | passes | a directory the same command just created in the temp folder |
 | `rm -rf "$(mktemp -d)"/*`, `.../..`, or a substitution running anything besides `mktemp` | denies | denies | unchanged |
