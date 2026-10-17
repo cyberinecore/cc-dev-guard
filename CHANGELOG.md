@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.9.2] - 2026-10-17
+
+- The SessionStart hook hands Claude three sentences of `additionalContext` on how to avoid a `danger_guard` denial: a recursive `rm` names its target literally, never through a variable or substitution, and text fed to an interpreter or database client is scanned like a command, so destructive statements go into a file through a plain `cat` heredoc instead. Until now the rule reached Claude only through the first denial, so every session paid one denied attempt per cleanup. The text states principles, not the guard's allow list. Option `session_hint`, default on; nothing is added when it or `danger_guard` is off (D43).
+
 ## [0.9.1] - 2026-10-17
 
 - `danger_guard` no longer denies the English word "truncate" in prose that a scanned command carries, such as a Python string in a `python3 - <<'EOF'` heredoc ("writes truncate in place"). A `TRUNCATE` is now denied when it reads as a statement: `TRUNCATE TABLE <name>` anywhere; `truncate <names>` at the start of a statement (after the start of a line, `;`, a quote, `(` or `*/`) and followed by a statement end, quote, `)`, comment, `*` or a TRUNCATE option; or `truncate <names>` anywhere followed by `;`, the end of a line, a comment, `*` or a TRUNCATE option (D42).
