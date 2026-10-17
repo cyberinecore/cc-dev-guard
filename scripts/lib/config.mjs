@@ -22,6 +22,7 @@ export function defaultConfig() {
     isolateWorktrees: false,
     bashGuard: true,
     dangerGuard: true,
+    sessionHint: true,
     bypassStrict: false,
     protectedBranches: [...DEFAULT_PROTECTED_BRANCHES],
     denyAwsS3Deletes: true,
@@ -43,7 +44,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -224,6 +225,7 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.bashGuard = parseBool(option(env, "bash_guard"), "bash_guard", true, w);
   c.isolateWorktrees = parseBool(option(env, "isolate_worktrees"), "isolate_worktrees", false, w);
   c.dangerGuard = parseBool(option(env, "danger_guard"), "danger_guard", true, w);
+  c.sessionHint = parseBool(option(env, "session_hint"), "session_hint", true, w);
   c.denyAwsS3Deletes = parseBool(option(env, "deny_aws_s3_deletes"), "deny_aws_s3_deletes", true, w);
   c.bypassStrict = parseBool(option(env, "bypass_strict"), "bypass_strict", false, w);
   const branches = parseNameList(option(env, "protected_branches"));
@@ -253,6 +255,7 @@ function applyRepoEnv(c, repoEnv, file) {
     else if (optionName === "isolate_worktrees" && raw === "true") c.isolateWorktrees = true;
     else if (optionName === "bash_guard" && raw === "true") c.bashGuard = true;
     else if (optionName === "danger_guard" && raw === "true") c.dangerGuard = true;
+    else if (optionName === "session_hint" && raw === "true") c.sessionHint = true;
     else if (optionName === "bypass_strict" && raw === "true") c.bypassStrict = true;
     else if (optionName === "deny_aws_s3_deletes" && raw === "true") c.denyAwsS3Deletes = true;
     else w.push(`${where} sets ${optionPrefix}${optionName.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);

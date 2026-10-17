@@ -74,6 +74,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `isolate_worktrees` | `false` | ask before a session started in a linked worktree writes into the main checkout or another worktree of the same repository (file tools, Bash writes, MCP writes) |
 | `worktree_guard` | `true` | ask before a Bash `git worktree add` whose path lies outside the repository's `.claude/worktrees/` |
 | `danger_guard` | `true` | deny data-destroying Bash commands in every permission mode (see [Data-destroying commands](#data-destroying-commands)) |
+| `session_hint` | `true` | at session start, hand Claude three sentences on how to avoid a `danger_guard` denial (a literal path for a recursive `rm`, no destructive statements in text fed to an interpreter); off, or with `danger_guard` off, nothing is added |
 | `protected_branches` | `main`, `master`, `production`, `prod`, `development`, `develop`, `dev`, `release`, `staging` | branches a force-push to is denied |
 | `deny_aws_s3_deletes` | `true` | also deny `aws s3 rm`/`rb` and `aws s3api delete-*` |
 | `bypass_strict` | `false` | under `bypassPermissions`, deny every write to another repository instead of letting a retry through |

@@ -29,13 +29,23 @@ test("an engine that fails to load still answers ask, or deny under bypassPermis
   }
 });
 
-test("session-start is silent on node 18+ and warns on older node", () => {
+test("session-start hands over the danger hint on node 18+, is silent with the hint off, and warns on older node", () => {
   const r = spawnSync(process.execPath, [entry, "session-start"], { encoding: "utf8" });
   assert.equal(r.status, 0);
-  assert.equal(r.stdout, "");
+  assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, /^cyberine-devguard denies/);
+  const off = spawnSync(process.execPath, [entry, "session-start"], { encoding: "utf8", env: { ...process.env, CLAUDE_PLUGIN_OPTION_SESSION_HINT: "false" } });
+  assert.equal(off.status, 0);
+  assert.equal(off.stdout, "");
   assert.equal(sessionStart("22.1.0"), null);
   assert.equal(sessionStart("18.0.0"), null);
   assert.match(sessionStart("16.20.2").systemMessage, /16\.20\.2 is older than 18/);
+  assert.match(sessionStart("16.20.2", { dangerGuard: true, sessionHint: true }).systemMessage, /older than 18/);
+  const hint = sessionStart("22.1.0", { dangerGuard: true, sessionHint: true });
+  assert.equal(hint.hookSpecificOutput.hookEventName, "SessionStart");
+  assert.match(hint.hookSpecificOutput.additionalContext, /^cyberine-devguard denies data-destroying Bash commands/);
+  assert.ok(hint.hookSpecificOutput.additionalContext.length < 800);
+  assert.equal(sessionStart("22.1.0", { dangerGuard: true, sessionHint: false }), null);
+  assert.equal(sessionStart("22.1.0", { dangerGuard: false, sessionHint: true }), null);
 });
 
 test("the hook stays well inside its configured timeout", () => {

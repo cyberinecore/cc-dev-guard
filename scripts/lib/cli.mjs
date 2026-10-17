@@ -55,10 +55,17 @@ function logDecision(env, input, verdict, out, now) {
   } catch {}
 }
 
-export function sessionStart(nodeVersion) {
+export const SESSION_HINT = [
+  `${pluginName} denies data-destroying Bash commands in every permission mode; a command that is really needed goes to the user to run. To avoid a denial:`,
+  "- Recursive rm: write the full target path literally, never through a variable or command substitution; the guard cannot resolve those and denies them.",
+  "- Text handed to an interpreter or database client (a shell, a remote shell, an SQL client, an inline script) is scanned like a command, so a statement that drops or empties a table, or a recursive delete, inside that text is denied. Write such text to a file with a plain cat heredoc first; that body is not scanned.",
+].join("\n");
+
+export function sessionStart(nodeVersion, config = null) {
   const major = Number(String(nodeVersion).split(".")[0]);
-  if (major >= 18) return null;
-  return { systemMessage: `${pluginName}: node ${nodeVersion} is older than 18, so the ${pluginName} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
+  if (major < 18) return { systemMessage: `${pluginName}: node ${nodeVersion} is older than 18, so the ${pluginName} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
+  if (config && config.dangerGuard && config.sessionHint) return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: SESSION_HINT } };
+  return null;
 }
 
 export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Date.now() }) {
@@ -233,6 +240,7 @@ function describeSession(opts, env) {
     `bash guard: ${config.bashGuard}`,
     `worktree guard: ${config.worktreeGuard}`,
     `isolate worktrees: ${config.isolateWorktrees}`,
+    `session hint: ${config.dangerGuard && config.sessionHint}`,
     `danger guard: ${config.dangerGuard}${config.dangerGuard ? ` (aws s3 deletes: ${config.denyAwsS3Deletes}; escape: ${[ESCAPE_ENV, config.allowDangerEnv].filter(Boolean).join(" or ")}=1)` : ""}`,
     `protected branches: ${config.protectedBranches.join(", ") || "none"}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
@@ -292,7 +300,11 @@ export async function main(argv, { env = namedEnv(process.env), stdout = process
       try {
         pruneSessionRecords(env);
       } catch {}
-      const out = sessionStart(process.versions.node);
+      let config = null;
+      try {
+        config = loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, process.cwd()) });
+      } catch {}
+      const out = sessionStart(process.versions.node, config);
       if (out) stdout.write(JSON.stringify(out) + "\n");
       return 0;
     }
