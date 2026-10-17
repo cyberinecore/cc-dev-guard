@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.9.3] - 2026-10-17
+
+- Fixed: `session_hint` was missing from the plugin's `userConfig`, so 0.9.2 offered no way to turn the hint off from `/config`. The option is now listed with its default.
+
 ## [0.9.2] - 2026-10-17
 
 - The SessionStart hook hands Claude three sentences of `additionalContext` on how to avoid a `danger_guard` denial: a recursive `rm` names its target literally, never through a variable or substitution, and text fed to an interpreter or database client is scanned like a command, so destructive statements go into a file through a plain `cat` heredoc instead. Until now the rule reached Claude only through the first denial, so every session paid one denied attempt per cleanup. The text states principles, not the guard's allow list. Option `session_hint`, default on; nothing is added when it or `danger_guard` is off (D43).
