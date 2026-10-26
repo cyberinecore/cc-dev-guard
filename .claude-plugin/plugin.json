@@ -2,8 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.9.3",
-  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, plus status, explain and worktree report skills.",
+  "version": "0.10.0",
+  "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, and asks before or denies commands that disrupt the user's running machine (pkill by name, tmux sessions it did not create, system settings, launch agents, repeated app relaunches), plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
     "email": "xinchao@nghia-pham.com"
@@ -96,6 +96,24 @@
       "title": "Explain danger_guard at session start",
       "description": "At session start, give Claude three sentences on how to avoid a danger_guard denial: a recursive rm names its target literally, and text handed to an interpreter or database client is scanned like a command. Nothing is added while this or danger_guard is off.",
       "default": true
+    },
+    "live_guard": {
+      "type": "boolean",
+      "title": "Guard the user's running machine",
+      "description": "Deny, in every permission mode, Bash commands that stop processes far beyond this session (pkill or killall of a common name such as node or cat, kill -1, killall Dock or Finder, shutdown and reboot), and ask before kills by name, pattern or port, tmux commands on sessions this session did not create, macOS system settings (defaults write to com.apple or the global domain, networksetup, pmset, /etc/hosts), launchd and cron jobs, adb and devicectl changes to a physical device, and rsync --delete to a remote. Under bypassPermissions an ask is denied once and a retry within 10 minutes passes. CY_ALLOW_DANGER=1 lifts it.",
+      "default": true
+    },
+    "live_guard_desktop": {
+      "type": "boolean",
+      "title": "Also guard the desktop",
+      "description": "While live_guard is on, also ask before pbcopy, say, afplay, cliclick, open without -g, and AppleScript that sends keystrokes, shows a dialog, changes the volume or the clipboard, or brings an app to the front.",
+      "default": false
+    },
+    "relaunch_limit": {
+      "type": "number",
+      "title": "App relaunch limit",
+      "description": "While live_guard is on, ask before this session launches or brings the same app to the front (open -a, a .app path, AppleScript activate) more than this many times within 60 minutes; under bypassPermissions it is denied. 0 turns the limit off.",
+      "default": 5
     },
     "protected_branches": {
       "type": "string",

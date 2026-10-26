@@ -8,14 +8,15 @@ Nothing leaves your computer. Cyberine DevGuard's hooks make no network requests
 
 ## What it reads locally
 
-To decide whether a file write stays inside the session's repository, Cyberine DevGuard reads, on your machine only: the tool call Claude Code hands to the hook (tool name and file path), Claude Code settings files (only `permissions.additionalDirectories`, `autoMemoryDirectory`, and the `env` keys for Cyberine DevGuard's own options), `.claude/cyberine-devguard.json` files, the `--add-dir` arguments and start directory of the running `claude` process, and git metadata of the repositories involved. For a Bash tool call it reads the command text to find write targets; for a filesystem MCP tool call it reads the path arguments. It does not read your conversation: the session transcript is opened only if you turn on the `read_transcript` option, and then only its environment snapshot (working directory and allowed directories) and the record Claude Code writes on `/cd` (the directory moved to) are parsed.
+To decide whether a file write stays inside the session's repository, Cyberine DevGuard reads, on your machine only: the tool call Claude Code hands to the hook (tool name and file path), Claude Code settings files (only `permissions.additionalDirectories`, `autoMemoryDirectory`, and the `env` keys for Cyberine DevGuard's own options), `.claude/cyberine-devguard.json` files, the `--add-dir` arguments and start directory of the running `claude` process, and git metadata of the repositories involved. For a Bash tool call it reads the command text to find write targets and commands that destroy data or disrupt the running machine; for a filesystem MCP tool call it reads the path arguments. It does not read your conversation: the session transcript is opened only if you turn on the `read_transcript` option, and then only its environment snapshot (working directory and allowed directories) and the record Claude Code writes on `/cd` (the directory moved to) are parsed.
 
 ## What it stores locally, and for how long
 
 Inside its Claude Code plugin data directory (`~/.claude/plugins/data/<id>/`):
 
 - the directories you added with `/add-dir`, per session, deleted after 7 days;
-- empty marker files in `deny-once` mode, deleted after 10 minutes;
+- empty marker files for `deny-once` answers, deleted after 10 minutes;
+- with `live_guard` on (the default): per session, the names of tmux sessions that session created and the times it launched each app within the last 60 minutes, deleted after 7 days;
 - only if you turn on `log_decisions`: one line per stopped write with the time, session id, tool, file path and verdict, kept until you delete it or uninstall the plugin.
 
 Claude Code deletes the data directory when you uninstall the plugin (unless you pass `--keep-data`).

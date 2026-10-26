@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -13,8 +14,10 @@ import { makeGit } from "./git.mjs";
 import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
 import { isCacheDir } from "./cachedir.mjs";
 import { dangerReason, ESCAPE_ENV, isCacheDirTagPath, TAG_WRITE_REASON } from "./dangerguard.mjs";
+import { liveCheck, liveFileReason } from "./liveguard.mjs";
+import { countLaunches, liveStateDir, loadLiveState, RELAUNCH_WINDOW_MS, saveLiveState } from "./livestate.mjs";
 import { mcpWriteTargets } from "./mcpfs.mjs";
-import { GUARDED_FILE_WHYS, render, renderDanger, renderError, renderWorktree } from "./output.mjs";
+import { GUARDED_FILE_WHYS, render, renderDanger, renderError, renderLive, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 
@@ -61,11 +64,15 @@ export const SESSION_HINT = [
   "- Text handed to an interpreter or database client (a shell, a remote shell, an SQL client, an inline script) is scanned like a command, so a statement that drops or empties a table, or a recursive delete, inside that text is denied. Write such text to a file with a plain cat heredoc first; that body is not scanned.",
 ].join("\n");
 
+export const LIVE_HINT = `${pluginName} also guards the user's running machine: stop a process by the PID this session started, never by name, pattern or port, and leave the user's tmux sessions, system settings and launch agents alone; such commands are asked about or denied.`;
+
 export function sessionStart(nodeVersion, config = null) {
   const major = Number(String(nodeVersion).split(".")[0]);
   if (major < 18) return { systemMessage: `${pluginName}: node ${nodeVersion} is older than 18, so the ${pluginName} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
-  if (config && config.dangerGuard && config.sessionHint) return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: SESSION_HINT } };
-  return null;
+  if (!config || !config.sessionHint) return null;
+  const parts = [config.dangerGuard ? SESSION_HINT : "", config.liveGuard ? LIVE_HINT : ""].filter(Boolean);
+  if (!parts.length) return null;
+  return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: parts.join("\n") } };
 }
 
 export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Date.now() }) {
@@ -83,6 +90,8 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
     const config = loadConfig({ env, sessionRoot });
     const tag = tagWriteCheck([input.tool_input?.file_path, input.tool_input?.notebook_path], { env, config, sessionRoot });
     if (tag) return tag;
+    const liveFile = liveFileCheck([input.tool_input?.file_path, input.tool_input?.notebook_path], input, { env, config, sessionRoot, now });
+    if (liveFile) return liveFile;
     if (config.mode === "off") return null;
     const verdict = (deps.decide || decide)(input, { sessionRoot, env, config });
     const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
@@ -110,6 +119,8 @@ function bashHook(input, env, deps, now) {
   const config = loadConfig({ env, sessionRoot });
   const danger = dangerCheck(command, { env, config, sessionRoot, home });
   if (danger) return danger;
+  const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
+  if (live) return live;
   const writes = findWrites(command, { cwd, home });
   const worktree = mentionsWorktree(command);
   if (!writes.length && !worktree) return null;
@@ -159,6 +170,47 @@ function dangerOut(reason, { env, config, sessionRoot }) {
   return renderDanger(reason, { escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings] });
 }
 
+function liveRender(finding, input, { env, config, sessionRoot, now }) {
+  const escape = escapeOpen(env, config, sessionRoot);
+  if (escape.open) return null;
+  return renderLive(finding, { input, now, markerDir: markerDirFor(env), warnings: [...config.warnings, ...escape.warnings], bypassStrict: config.bypassStrict, escapeName: config.allowDangerEnv || ESCAPE_ENV });
+}
+
+function liveCommandCheck(command, input, ctx) {
+  const { env, config, now } = ctx;
+  if (!config.liveGuard) return null;
+  const dir = liveStateDir(env);
+  const state = loadLiveState(dir, input.session_id);
+  const result = liveCheck(command, { desktop: config.liveGuardDesktop, owned: new Set(state.owned), sessionExists: (name) => ctx.tmuxSessionExists(name, env) });
+  let finding = result.finding;
+  if (result.created.length || result.launches.length) {
+    for (const name of result.created) if (!state.owned.includes(name)) state.owned.push(name);
+    const counts = countLaunches(state, result.launches, now);
+    saveLiveState(dir, input.session_id, state, now);
+    const over = config.relaunchLimit > 0 ? counts.find((c) => c.count > config.relaunchLimit) : null;
+    if (over && finding?.level !== "deny") finding = { level: "ask", hard: true, key: `relaunch:${over.app}`, reason: `\`${over.app}\` has been launched or brought to the front ${over.count} times by this session in the last ${RELAUNCH_WINDOW_MS / 60000} minutes (relaunch_limit ${config.relaunchLimit}). Each relaunch takes focus and interrupts the user; check the app another way (logs, a test, a screenshot of a window you own) or ask the user.` };
+  }
+  return finding ? liveRender(finding, input, ctx) : null;
+}
+
+function tmuxSessionExists(name, env) {
+  try {
+    return spawnSync("tmux", ["has-session", "-t", `=${name}`], { env, stdio: "ignore", timeout: 1000, windowsHide: true }).status === 0;
+  } catch {
+    return false;
+  }
+}
+
+function liveFileCheck(paths, input, ctx) {
+  if (!ctx.config.liveGuard) return null;
+  const home = ctx.env.HOME || ctx.env.USERPROFILE || "";
+  for (const p of paths) {
+    const reason = liveFileReason(p, home);
+    if (reason) return liveRender({ level: "ask", key: `file:${p}`, reason: `writing ${reason}` }, input, ctx);
+  }
+  return null;
+}
+
 function mcpHook(input, env, deps, now) {
   const targets = mcpWriteTargets(input.tool_name, input.tool_input);
   if (!targets || !targets.length) return null;
@@ -166,6 +218,8 @@ function mcpHook(input, env, deps, now) {
   const config = loadConfig({ env, sessionRoot });
   const tag = tagWriteCheck(targets.map((t) => t.path), { env, config, sessionRoot });
   if (tag) return tag;
+  const liveFile = liveFileCheck(targets.map((t) => t.path), input, { env, config, sessionRoot, now });
+  if (liveFile) return liveFile;
   if (config.mode === "off") return null;
   const git = deps.git || makeGit();
   for (const t of targets) {
@@ -242,6 +296,7 @@ function describeSession(opts, env) {
     `isolate worktrees: ${config.isolateWorktrees}`,
     `session hint: ${config.dangerGuard && config.sessionHint}`,
     `danger guard: ${config.dangerGuard}${config.dangerGuard ? ` (aws s3 deletes: ${config.denyAwsS3Deletes}; escape: ${[ESCAPE_ENV, config.allowDangerEnv].filter(Boolean).join(" or ")}=1)` : ""}`,
+    `live guard: ${config.liveGuard}${config.liveGuard ? ` (desktop: ${config.liveGuardDesktop}; relaunch limit: ${config.relaunchLimit || "off"})` : ""}`,
     `protected branches: ${config.protectedBranches.join(", ") || "none"}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
