@@ -573,7 +573,8 @@ function openApp(a, ctx) {
 
 export function liveFileReason(path, home = "") {
   if (typeof path !== "string" || path === "") return "";
-  const p = path.startsWith("~/") && home ? home + path.slice(1) : path;
+  const slashed = path.replace(/\\/g, "/");
+  const p = slashed.startsWith("~/") && home ? home.replace(/\\/g, "/") + slashed.slice(1) : slashed;
   if (/^(\/private)?\/etc\/hosts$/.test(p)) return "`/etc/hosts` controls name resolution for every app on the machine.";
   if (reLaunchdPath.test(p)) return `\`${path}\` is in a LaunchAgents or LaunchDaemons folder: a job there starts on its own and outlives this session.`;
   if (/^(\/private)?\/(usr\/lib\/cron\/tabs|var\/at\/tabs)\//.test(p)) return `\`${path}\` is a cron table: a job there runs after this session ends.`;

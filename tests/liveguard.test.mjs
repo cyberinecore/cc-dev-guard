@@ -186,6 +186,7 @@ test("file-tool targets that install jobs or change name resolution are named", 
   assert.notEqual(liveFileReason("/Users/me/Library/LaunchAgents/x.plist", home), "");
   assert.notEqual(liveFileReason("~/Library/LaunchAgents/x.plist", home), "");
   assert.notEqual(liveFileReason("/Library/LaunchDaemons/x.plist", home), "");
+  assert.notEqual(liveFileReason("C:\\Users\\me\\Library\\LaunchAgents\\x.plist", "C:\\Users\\me"), "");
   assert.equal(liveFileReason("/Users/me/WORK/app/hosts", home), "");
   assert.equal(liveFileReason("/Users/me/WORK/app/Library/LaunchAgentsX/a", home), "");
   assert.equal(liveFileReason(undefined, home), "");
