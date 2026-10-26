@@ -53,13 +53,7 @@ export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ig
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
-  try {
-    const env = JSON.parse(readFileSync(join(sessionRoot, ".claude", "settings.json"), "utf8"))?.env;
-    if (!env || typeof env !== "object") return [];
-    return OPTION_KEYS.filter((k) => Object.prototype.hasOwnProperty.call(env, OPTION_PREFIX + k.toUpperCase()));
-  } catch {
-    return [];
-  }
+  return OPTION_KEYS.filter((k) => repoSetsEnv(sessionRoot, OPTION_PREFIX + k.toUpperCase()));
 }
 
 export function repoSetsEnv(sessionRoot, name) {
@@ -262,7 +256,7 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(escapeName)) c.allowDangerEnv = escapeName;
     else w.push(`option allow_danger_env: "${escapeName}" is not an environment variable name; ignored`);
   }
-  if (untrusted.length) applyRepoEnv(c, repoEnv, join(sessionRoot, ".claude", "settings.json"));
+  if (untrusted.length) applyRepoEnv(c, repoEnv, join(sessionRoot, ".claude", "settings.json or settings.local.json"));
   const file = findRepoFile(sessionRoot);
   if (file) {
     c.repoFile = file;

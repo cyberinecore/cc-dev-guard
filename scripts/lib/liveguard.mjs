@@ -56,8 +56,10 @@ export function shellWords(text) {
   let cur = "";
   let quoted = false;
   let started = false;
+  let bare = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
+    if (!started) bare = c !== "'" && c !== '"';
     if (c === "'") {
       const end = text.indexOf("'", i + 1);
       cur += end < 0 ? text.slice(i + 1) : text.slice(i + 1, end);
@@ -93,7 +95,7 @@ export function shellWords(text) {
       continue;
     }
     if (/\s/.test(c)) {
-      if (started) out.push({ w: cur, q: quoted });
+      if (started) out.push({ w: cur, q: quoted, bare });
       cur = "";
       quoted = started = false;
       continue;
@@ -101,14 +103,15 @@ export function shellWords(text) {
     cur += c;
     started = true;
   }
-  if (started) out.push({ w: cur, q: quoted });
+  if (started) out.push({ w: cur, q: quoted, bare });
   return out;
 }
 
-const isAssign = (t) => !t.q && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t.w);
+const isAssign = (t) => (!t.q || t.bare) && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t.w);
+const SHELL_KEYWORDS = new Set(["if", "then", "else", "elif", "do", "while", "until", "!", "{", "(", "time"]);
 const VALUE_FLAGS = {
-  sudo: new Set(["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T"]),
-  env: new Set(["-u", "-S", "-P", "-C"]),
+  sudo: new Set(["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "--user", "--group", "--host", "--prompt", "--close-from", "--chdir", "--role", "--type", "--other-user", "--command-timeout"]),
+  env: new Set(["-u", "-S", "-P", "-C", "--unset", "--split-string", "--chdir"]),
   nice: new Set(["-n"]),
   timeout: new Set(["-s", "-k", "--signal", "--kill-after"]),
   caffeinate: new Set(["-t", "-w"]),
@@ -126,6 +129,10 @@ export function commandOf(tokens, vars) {
       i++;
     }
     if (i >= tokens.length) return null;
+    if (!tokens[i].q && SHELL_KEYWORDS.has(tokens[i].w)) {
+      i++;
+      continue;
+    }
     const bin = baseOf(tokens[i].w.replace(/^[({]+/, ""));
     if (bin === "export" || bin === "local" || bin === "readonly") {
       for (const t of tokens.slice(i + 1)) {
@@ -168,8 +175,8 @@ const words = (args) => args.map((t) => t.w);
 const ask = (key, reason, extra = {}) => ({ level: "ask", key, reason, ...extra });
 const deny = (key, reason) => ({ level: "deny", key, reason });
 
-export function liveCheck(command, { desktop = false, owned = new Set() } = {}) {
-  const ctx = { desktop, owned: new Set(owned), created: [], launches: [], findings: [] };
+export function liveCheck(command, { desktop = false, owned = new Set(), sessionExists = () => false } = {}) {
+  const ctx = { desktop, owned: new Set(owned), sessionExists, created: [], launches: [], findings: [] };
   if (typeof command === "string" && command !== "") scan(command, ctx, 0);
   const finding = ctx.findings.find((f) => f.level === "deny") || ctx.findings[0] || null;
   return { finding, created: ctx.created, launches: ctx.launches };
@@ -281,7 +288,8 @@ function judge({ bin, args, viaXargs }, sub, vars, ctx, depth) {
       if (a.some((w) => ["--uninstall", "--uninstall_only", "-9", "--uninstall_bundle_id"].includes(w))) push(ask("ios-deploy", "`ios-deploy` here uninstalls an app from a physical device the user may be carrying."));
       return;
     case "rsync":
-      return push(rsyncDelete(a));
+      push(rsyncDelete(a));
+      return push(fileShapes(bin, a, sub));
   }
   if (DESKTOP_BINS.has(bin)) {
     if (ctx.desktop) push(ask(`desktop-${bin}`, `\`${bin}\` acts on the user's desktop (clipboard, sound or input) while they may be using it.`));
@@ -290,8 +298,15 @@ function judge({ bin, args, viaXargs }, sub, vars, ctx, depth) {
   push(fileShapes(bin, a, sub));
 }
 
+const DEST_LAST_BINS = new Set(["cp", "install", "ln", "rsync", "ditto"]);
+
 function fileShapes(bin, a, sub) {
   const writes = WRITE_BINS.has(bin) || ((bin === "sed" || bin === "perl") && a.some((w) => /^-[a-zA-Z]*i/.test(w)));
+  if (writes && DEST_LAST_BINS.has(bin)) {
+    const dest = " " + (a.filter((w) => !w.startsWith("-")).pop() || "");
+    const redirect = sub.replace(/^[^>]*/, "");
+    if (!reHostsPath.test(dest) && !reLaunchdPath.test(dest) && !reHostsPath.test(redirect) && !reLaunchdPath.test(redirect)) return null;
+  }
   if (reHostsPath.test(sub) && (writes || /(^|[^<])>>?\s*['"]?(\/private)?\/etc\/hosts/.test(sub))) return ask("etc-hosts", "this command writes `/etc/hosts`, which changes name resolution for every app on the machine.");
   if (reLaunchdPath.test(sub) && (writes || />>?\s*['"]?[^\s'"]*\/Library\/Launch(Agents|Daemons)\//.test(sub))) return ask("launchd-plist", "this command writes into a LaunchAgents or LaunchDaemons folder, which installs a job that starts on its own and outlives this session.");
   return null;
@@ -313,6 +328,9 @@ function strippedPattern(p) {
   return p.replace(/^\^/, "").replace(/\$$/, "");
 }
 
+const isSignalName = (w) => /^(SIG)?[A-Z][A-Z0-9+-]*$|^\d+$/.test(w);
+const isNullSignal = (w) => /^(SIG)?0$/.test(w);
+
 function nameKill(bin, a) {
   const valued = bin === "pkill" ? new Set("FGgjMNPtUus") : new Set("utc");
   const patterns = [];
@@ -325,12 +343,21 @@ function nameKill(bin, a) {
       break;
     }
     if (/^-(\d+|SIG[A-Z0-9]+|[A-Z][A-Z0-9]*)$/.test(w) || w === "--signal") {
-      if (w === "--signal") i++;
+      const sig = w === "--signal" ? a[++i] || "" : w.slice(1);
+      if (isNullSignal(sig)) return null;
+      continue;
+    }
+    if (/^--signal=/.test(w)) {
+      if (isNullSignal(w.slice(9))) return null;
       continue;
     }
     if (/^-[a-zA-Z]+$/.test(w)) {
       const letters = w.slice(1);
       if (bin === "pkill" && letters.includes("f")) full = true;
+      if (bin === "killall" && letters === "s" && isSignalName(a[i + 1] || "") && i + 2 < a.length) {
+        if (isNullSignal(a[++i])) return null;
+        continue;
+      }
       if (bin === "killall" && /[sl]/.test(letters)) return null;
       if (/[uUG]/.test(letters)) byUser = true;
       if (bin === "killall" && letters.includes("c") && i + 1 < a.length) patterns.push(a[i + 1]);
@@ -361,6 +388,8 @@ function nameKill(bin, a) {
 function pidKill(a) {
   let i = 0;
   if (a[0] === "-l" || a[0] === "-L") return null;
+  const signal = a[0] === "-s" || a[0] === "-n" ? a[1] || "" : /^-[^-]/.test(a[0] || "") ? a[0].slice(1) : "";
+  if (isNullSignal(signal)) return null;
   if (a[0] === "-s" || a[0] === "-n") i = 2;
   else if (a[0] && a[0].startsWith("-") && a[0] !== "--") i = 1;
   if (a[i] === "--") i++;
@@ -443,13 +472,20 @@ function adb(a) {
   return null;
 }
 
+const RSYNC_VALUED = new Set([
+  "-e", "--rsh", "--exclude", "--include", "--filter", "-f", "--exclude-from", "--include-from", "--files-from", "--log-file", "--log-file-format", "--password-file",
+  "--backup-dir", "--suffix", "-T", "--temp-dir", "--compare-dest", "--copy-dest", "--link-dest", "--chmod", "--chown", "--usermap", "--groupmap", "--rsync-path",
+  "--timeout", "--contimeout", "--port", "--bwlimit", "--max-size", "--min-size", "--max-delete", "--partial-dir", "-B", "--block-size", "-M", "--remote-option",
+  "--out-format", "--skip-compress", "--iconv", "--sockopts", "--address", "--write-batch", "--only-write-batch", "--read-batch", "--checksum-choice", "--compress-choice",
+]);
+
 function rsyncDelete(a) {
   const del = a.some((w) => /^--del(ete(-[a-z]+)?)?$|^--remove-source-files$/.test(w));
   if (!del) return null;
   if (a.some((w) => w === "--dry-run" || /^-[a-zA-Z]*n[a-zA-Z]*$/.test(w))) return null;
   const operands = [];
   for (let i = 0; i < a.length; i++) {
-    if (a[i] === "-e" || a[i] === "--rsh" || a[i] === "--exclude" || a[i] === "--include" || a[i] === "--filter" || a[i] === "-f") {
+    if (RSYNC_VALUED.has(a[i])) {
       i++;
       continue;
     }
@@ -477,9 +513,9 @@ function tmux(a, vars, ctx) {
   };
   if (cmd === "new-session") {
     const name = flag("-s");
-    if (name !== undefined) {
+    if (name !== undefined && !ownSocket) {
       const resolved = resolveWord({ w: name }, vars);
-      if (resolved) {
+      if (resolved && !ctx.owned.has(resolved) && !ctx.sessionExists(resolved)) {
         ctx.created.push(resolved);
         ctx.owned.add(resolved);
       }
@@ -562,6 +598,7 @@ function openApp(a, ctx) {
     if (/^-[a-zA-Z]+$/.test(w)) {
       if (w.includes("g") || w.includes("j")) background = true;
       if (w.includes("R")) return;
+      if (/[ab]$/.test(w)) app = a[++i] || "";
       continue;
     }
     targets.push(w);

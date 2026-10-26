@@ -16,9 +16,9 @@ function withData(env) {
   return { CLAUDE_PLUGIN_DATA: join(tempDir(), "data"), ...env };
 }
 
-function bash(a, command, env, { mode = "default", sid = "s1", now } = {}) {
+function bash(a, command, env, { mode = "default", sid = "s1", now, exists = () => false } = {}) {
   const raw = JSON.stringify({ session_id: sid, cwd: a, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command }, permission_mode: mode });
-  return runHook({ raw, env: { CLAUDE_PROJECT_DIR: a, ...env }, now });
+  return runHook({ raw, env: { CLAUDE_PROJECT_DIR: a, ...env }, now, deps: { tmuxSessionExists: exists } });
 }
 
 function write(a, file, env, mode = "default") {
@@ -80,6 +80,23 @@ test("the relaunch limit asks after the limit and denies under bypassPermissions
   assert.equal(bash(a, "open -a Safari", env, { now: now + 4000 }), null);
 });
 
+test("a tmux session that already exists is not claimed by new-session", () => {
+  const a = session();
+  const env = withData(isolatedEnv());
+  const exists = (name) => name === "main";
+  assert.equal(bash(a, "tmux new-session -d -s main || true", env, { exists }), null);
+  assert.equal(decisionOf(bash(a, "tmux kill-session -t main", env, { exists })), "ask");
+});
+
+test("the relaunch limit still denies under bypassPermissions when the desktop pack also asks", () => {
+  const a = session();
+  const env = withData(isolatedEnv({ CLAUDE_PLUGIN_OPTION_LIVE_GUARD_DESKTOP: "true", CLAUDE_PLUGIN_OPTION_RELAUNCH_LIMIT: "2" }));
+  const now = Date.parse("2026-10-26T10:00:00Z");
+  const seen = [];
+  for (let i = 0; i < 5; i++) seen.push(decisionOf(bash(a, "open -a Foo", env, { mode: "bypassPermissions", now: now + i })));
+  assert.deepEqual(seen.slice(2), ["deny", "deny", "deny"]);
+});
+
 test("relaunch_limit 0 turns the budget off", () => {
   const a = session();
   const env = withData(isolatedEnv({ CLAUDE_PLUGIN_OPTION_RELAUNCH_LIMIT: "0" }));
@@ -122,6 +139,14 @@ test("a repository can only tighten live_guard", () => {
   assert.equal(c.relaunchLimit, 5);
   assert.ok(c.warnings.some((w) => /liveGuard false is ignored/.test(w)));
   assert.ok(c.warnings.some((w) => /relaunchLimit 50 is ignored/.test(w)));
+  for (const file of ["settings.json", "settings.local.json"]) {
+    const b = session();
+    mkdirSync(join(b, ".claude"), { recursive: true });
+    writeFileSync(join(b, ".claude", file), JSON.stringify({ env: { CLAUDE_PLUGIN_OPTION_LIVE_GUARD: "false", CLAUDE_PLUGIN_OPTION_DANGER_GUARD: "false" } }));
+    const local = loadConfig({ env: { CLAUDE_PLUGIN_OPTION_LIVE_GUARD: "false", CLAUDE_PLUGIN_OPTION_DANGER_GUARD: "false" }, sessionRoot: b });
+    assert.equal(local.liveGuard, true, file);
+    assert.equal(local.dangerGuard, true, file);
+  }
   writeFileSync(join(a, ".claude", "settings.json"), JSON.stringify({ env: { CLAUDE_PLUGIN_OPTION_LIVE_GUARD: "false", CLAUDE_PLUGIN_OPTION_RELAUNCH_LIMIT: "1" } }));
   writeFileSync(join(a, ".claude", "cyberine-devguard.json"), "{}");
   const viaEnv = loadConfig({ env: { CLAUDE_PLUGIN_OPTION_LIVE_GUARD: "false", CLAUDE_PLUGIN_OPTION_RELAUNCH_LIMIT: "1" }, sessionRoot: a });

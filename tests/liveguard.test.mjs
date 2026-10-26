@@ -33,6 +33,17 @@ const DENIES = [
   "osascript -e 'tell application \"System Events\" to restart'",
   "nohup pkill node",
   "timeout 5 killall Finder",
+  "if pgrep -x node; then pkill node; fi",
+  "for n in a b; do pkill node; done",
+  "while true; do killall node; done",
+  "{ pkill node; }",
+  "! pkill node",
+  "sudo --user root pkill node",
+  "env FOO=\"hello world\" pkill node",
+  "/usr/bin/pkill node",
+  "killall -s SIGTERM node",
+  "killall -s 9 node",
+  "pkill --signal=KILL node",
 ];
 
 const ASKS = [
@@ -88,6 +99,11 @@ const ASKS = [
   "systemctl stop nginx",
   "osascript -e 'tell application \"Safari\" to quit'",
   "osascript -e 'tell application \"System Events\" to make login item at end with properties {path:\"/A.app\"}'",
+  "cp x.hosts /etc/hosts",
+  "mv /etc/hosts /tmp/hosts.old",
+  "rsync -a agent.plist ~/Library/LaunchAgents/",
+  "rsync -av --delete dist/ host:/srv/www/ --log-file sync.log",
+  "rsync -av --delete --exclude-from skip.txt dist/ host:/srv/www/",
 ];
 
 const PASSES = [
@@ -135,6 +151,16 @@ const PASSES = [
   "pbcopy < x.txt",
   "say done",
   "osascript -e 'display dialog \"hi\"'",
+  "pkill -0 node",
+  "killall -0 node",
+  "pkill --signal 0 node",
+  "kill -0 4242",
+  "kill -s 0 $(pgrep node)",
+  "cp /etc/hosts ./hosts.backup",
+  "cp ~/Library/LaunchAgents/com.example.plist ./backup.plist",
+  "rsync -a ~/Library/LaunchAgents/ ./backup/",
+  "FOO=\"a b\" make",
+  "if [ -f x ]; then echo pkill node; fi",
 ];
 
 test("broad or system-wide process stops and power commands are denied", () => {
@@ -160,11 +186,18 @@ test("tmux targets created in an earlier call pass when the session owns them", 
   assert.equal(level("tmux send-keys -t %3 Enter", { owned: new Set(["cx"]) }), "ask");
   assert.deepEqual(liveCheck("tmux new-session -d -s build-1 make").created, ["build-1"]);
   assert.deepEqual(liveCheck("tmux new-session -d -s \"$N\" make").created, []);
+  assert.deepEqual(liveCheck("tmux -L own new-session -d -s main").created, []);
+  assert.equal(level("tmux -L own new-session -d -s main; tmux kill-session -t main"), "ask");
+  const exists = (name) => name === "main";
+  assert.deepEqual(liveCheck("tmux new-session -d -s main", { sessionExists: exists }).created, []);
+  assert.equal(level("tmux new-session -d -s main || true; tmux kill-session -t main", { sessionExists: exists }), "ask");
+  assert.equal(level("tmux new-session -d -s cx || true; tmux kill-session -t cx", { sessionExists: exists }), "pass");
 });
 
 test("app launches are reported for the relaunch budget", () => {
   assert.deepEqual(liveCheck("open -a \"Session Deck\"").launches, ["Session Deck"]);
   assert.deepEqual(liveCheck("open -na /Applications/Foo.app").launches, ["Foo"]);
+  assert.deepEqual(liveCheck("open -na Safari").launches, ["Safari"]);
   assert.deepEqual(liveCheck("open ~/Applications/Session\\ Deck.app").launches, ["Session Deck"]);
   assert.deepEqual(liveCheck("osascript -e 'tell application \"Session Deck\" to activate'").launches, ["Session Deck"]);
   assert.deepEqual(liveCheck("open -R ~/Applications/Foo.app").launches, []);

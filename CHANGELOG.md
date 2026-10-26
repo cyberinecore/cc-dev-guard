@@ -8,6 +8,7 @@ All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-
 - New `relaunch_limit` (default 5): an app launched or brought to the front more than that many times within 60 minutes by one session asks, and under `bypassPermissions` is denied on every try. `0` turns it off.
 - New `live_guard_desktop` (default off): asks before `pbcopy`, `say`, `afplay`, `cliclick`, `open` without `-g`, and AppleScript keystrokes, dialogs, volume, clipboard or `activate`.
 - The session hint gains one sentence for `live_guard`: stop a process by the PID the session started.
+- Option keys set through the `env` block of a repository's `.claude/settings.local.json` are now tighten-only, like `.claude/settings.json` (D15); before, that file could turn `danger_guard` off.
 
 ## [0.9.3] - 2026-10-17
 

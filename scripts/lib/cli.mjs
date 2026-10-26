@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
@@ -118,7 +119,7 @@ function bashHook(input, env, deps, now) {
   const config = loadConfig({ env, sessionRoot });
   const danger = dangerCheck(command, { env, config, sessionRoot, home });
   if (danger) return danger;
-  const live = liveCommandCheck(command, input, { env, config, sessionRoot, now });
+  const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
   if (live) return live;
   const writes = findWrites(command, { cwd, home });
   const worktree = mentionsWorktree(command);
@@ -180,16 +181,24 @@ function liveCommandCheck(command, input, ctx) {
   if (!config.liveGuard) return null;
   const dir = liveStateDir(env);
   const state = loadLiveState(dir, input.session_id);
-  const result = liveCheck(command, { desktop: config.liveGuardDesktop, owned: new Set(state.owned) });
+  const result = liveCheck(command, { desktop: config.liveGuardDesktop, owned: new Set(state.owned), sessionExists: (name) => ctx.tmuxSessionExists(name, env) });
   let finding = result.finding;
   if (result.created.length || result.launches.length) {
     for (const name of result.created) if (!state.owned.includes(name)) state.owned.push(name);
     const counts = countLaunches(state, result.launches, now);
     saveLiveState(dir, input.session_id, state, now);
     const over = config.relaunchLimit > 0 ? counts.find((c) => c.count > config.relaunchLimit) : null;
-    if (over && !finding) finding = { level: "ask", hard: true, key: `relaunch:${over.app}`, reason: `\`${over.app}\` has been launched or brought to the front ${over.count} times by this session in the last ${RELAUNCH_WINDOW_MS / 60000} minutes (relaunch_limit ${config.relaunchLimit}). Each relaunch takes focus and interrupts the user; check the app another way (logs, a test, a screenshot of a window you own) or ask the user.` };
+    if (over && finding?.level !== "deny") finding = { level: "ask", hard: true, key: `relaunch:${over.app}`, reason: `\`${over.app}\` has been launched or brought to the front ${over.count} times by this session in the last ${RELAUNCH_WINDOW_MS / 60000} minutes (relaunch_limit ${config.relaunchLimit}). Each relaunch takes focus and interrupts the user; check the app another way (logs, a test, a screenshot of a window you own) or ask the user.` };
   }
   return finding ? liveRender(finding, input, ctx) : null;
+}
+
+function tmuxSessionExists(name, env) {
+  try {
+    return spawnSync("tmux", ["has-session", "-t", `=${name}`], { env, stdio: "ignore", timeout: 1000, windowsHide: true }).status === 0;
+  } catch {
+    return false;
+  }
 }
 
 function liveFileCheck(paths, input, ctx) {
