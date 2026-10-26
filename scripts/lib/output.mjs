@@ -72,9 +72,8 @@ export function denyReason(v) {
   return `Default: NO. \`${v.target}\`${via(v)} is ${v.why === "other-worktree" ? worktreeScope(v) : scopeText(v)}. Retry only if the user explicitly names that target this turn; otherwise report instead. ${fixHint(v)} (${pluginName} deny-once: a retry within ${retryMinutes} minutes passes.)`;
 }
 
-function markerName(input, v) {
-  const key = `${input?.session_id ?? ""}\u0000${v.targetRepo || v.target}`;
-  return createHash("sha1").update(key).digest("hex");
+function markerName(input, key) {
+  return createHash("sha1").update(`${input?.session_id ?? ""}\u0000${key}`).digest("hex");
 }
 
 function pruneMarkers(markerDir, now) {
@@ -93,10 +92,10 @@ function pruneMarkers(markerDir, now) {
   }
 }
 
-function denyOnce(v, { input, now, markerDir, warnings, note = "" }) {
-  const marker = join(markerDir, markerName(input, v));
+function firstTry(key, { input, now, markerDir }) {
+  const marker = join(markerDir, markerName(input, key));
   try {
-    if (now - statSync(marker).mtimeMs < RETRY_WINDOW_MS) return null;
+    if (now - statSync(marker).mtimeMs < RETRY_WINDOW_MS) return false;
   } catch {}
   pruneMarkers(markerDir, now);
   try {
@@ -105,6 +104,11 @@ function denyOnce(v, { input, now, markerDir, warnings, note = "" }) {
     const t = new Date(now);
     utimesSync(marker, t, t);
   } catch {}
+  return true;
+}
+
+function denyOnce(v, { input, now, markerDir, warnings, note = "" }) {
+  if (!firstTry(v.targetRepo || v.target, { input, now, markerDir })) return null;
   return decision("deny", withWarnings(note ? `${denyReason(v)} ${note}` : denyReason(v), warnings));
 }
 
@@ -159,4 +163,17 @@ export function renderWorktree(v, { mode, input, warnings = [] } = {}) {
   const reason = withWarnings(worktreeReason(v), warnings);
   if (mode === "warn") return { systemMessage: `${pluginName} (warn mode): ${reason}` };
   return askOrDeny(input, reason);
+}
+
+export function renderLive(f, { input, now = Date.now(), markerDir, warnings = [], bypassStrict = false, escapeName } = {}) {
+  if (!f) return null;
+  if (f.level === "deny") {
+    return decision("deny", withWarnings(`${pluginName}: ${f.reason} live_guard denies this in every permission mode, because it disrupts the user's running machine beyond this session's own work. Stop only a process this session started, by its PID, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
+  }
+  if (input?.permission_mode === "bypassPermissions") {
+    if (f.hard || bypassStrict) return decision("deny", withWarnings(`${pluginName}: ${f.reason} This session runs with bypassPermissions, where no prompt reaches the user, so live_guard denies it. Report the command to the user instead of running it another way.`, warnings));
+    if (!firstTry(`live\u0000${f.key}`, { input, now, markerDir })) return null;
+    return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${f.reason} Retry only if the user explicitly asked for this command this turn; otherwise report it to the user instead. (${pluginName} live_guard deny-once under bypassPermissions: a retry within ${retryMinutes} minutes passes.)`, warnings));
+  }
+  return decision("ask", withWarnings(`${pluginName}: ${f.reason} It changes the user's running machine outside this session's own work. Approve only if you asked for it.`, warnings));
 }

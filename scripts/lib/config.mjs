@@ -7,6 +7,8 @@ const defaultMode = DEFAULT_MODE;
 const modeList = MODES.join(", ");
 const optionPrefix = OPTION_PREFIX;
 
+export const DEFAULT_RELAUNCH_LIMIT = 5;
+
 const WIDENING_KEYS = new Set(["extraAllowedDirs", "extra_allowed_dirs", "hubRepos", "hub_repos", "allowedDirs", "allowed_dirs", "additionalDirectories"]);
 
 export function defaultConfig() {
@@ -22,6 +24,9 @@ export function defaultConfig() {
     isolateWorktrees: false,
     bashGuard: true,
     dangerGuard: true,
+    liveGuard: true,
+    liveGuardDesktop: false,
+    relaunchLimit: DEFAULT_RELAUNCH_LIMIT,
     sessionHint: true,
     bypassStrict: false,
     protectedBranches: [...DEFAULT_PROTECTED_BRANCHES],
@@ -44,7 +49,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos"];
+export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -89,6 +94,17 @@ function parseDirList(raw, optionName, warnings) {
     else warnings.push(`option ${optionName}: "${part}" is not an absolute path; ignored`);
   }
   return out;
+}
+
+function parseLimit(raw, optionName, fallback, warnings) {
+  if (raw === undefined || raw === "") return fallback;
+  if (/^\d+$/.test(raw.trim())) return Number(raw.trim());
+  warnings.push(`option ${optionName}: "${raw}" is not a whole number; using ${fallback}`);
+  return fallback;
+}
+
+export function tightensLimit(current, next) {
+  return Number.isInteger(next) && next >= 1 && (current === 0 || next < current);
 }
 
 export function parseNameList(raw) {
@@ -166,6 +182,14 @@ function applyRepoFile(c, file) {
       if (value === true) c.dangerGuard = true;
       else if (value === false) w.push(`${where} dangerGuard false is ignored: a repository file can only make the guard stricter`);
       else w.push(`${where} dangerGuard must be true or false; ignored`);
+    } else if (optionName === "liveGuard" || optionName === "liveGuardDesktop") {
+      if (value === true) c[optionName] = true;
+      else if (value === false) {
+        if (c[optionName]) w.push(`${where} ${optionName} false is ignored: a repository file can only make the guard stricter`);
+      } else w.push(`${where} ${optionName} must be true or false; ignored`);
+    } else if (optionName === "relaunchLimit") {
+      if (tightensLimit(c.relaunchLimit, value)) c.relaunchLimit = value;
+      else w.push(`${where} relaunchLimit ${JSON.stringify(value)} is ignored: a repository file can only lower it to a whole number of at least 1`);
     } else if (optionName === "allowIgnoredNestedRepos") {
       if (value === false) c.allowIgnoredNestedRepos = false;
       else if (value === true) {
@@ -225,6 +249,9 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
   c.bashGuard = parseBool(option(env, "bash_guard"), "bash_guard", true, w);
   c.isolateWorktrees = parseBool(option(env, "isolate_worktrees"), "isolate_worktrees", false, w);
   c.dangerGuard = parseBool(option(env, "danger_guard"), "danger_guard", true, w);
+  c.liveGuard = parseBool(option(env, "live_guard"), "live_guard", true, w);
+  c.liveGuardDesktop = parseBool(option(env, "live_guard_desktop"), "live_guard_desktop", false, w);
+  c.relaunchLimit = parseLimit(option(env, "relaunch_limit"), "relaunch_limit", DEFAULT_RELAUNCH_LIMIT, w);
   c.sessionHint = parseBool(option(env, "session_hint"), "session_hint", true, w);
   c.denyAwsS3Deletes = parseBool(option(env, "deny_aws_s3_deletes"), "deny_aws_s3_deletes", true, w);
   c.bypassStrict = parseBool(option(env, "bypass_strict"), "bypass_strict", false, w);
@@ -256,6 +283,9 @@ function applyRepoEnv(c, repoEnv, file) {
     else if (optionName === "bash_guard" && raw === "true") c.bashGuard = true;
     else if (optionName === "danger_guard" && raw === "true") c.dangerGuard = true;
     else if (optionName === "session_hint" && raw === "true") c.sessionHint = true;
+    else if (optionName === "live_guard" && raw === "true") c.liveGuard = true;
+    else if (optionName === "live_guard_desktop" && raw === "true") c.liveGuardDesktop = true;
+    else if (optionName === "relaunch_limit" && /^\d+$/.test(raw ?? "") && tightensLimit(c.relaunchLimit, Number(raw))) c.relaunchLimit = Number(raw);
     else if (optionName === "bypass_strict" && raw === "true") c.bypassStrict = true;
     else if (optionName === "deny_aws_s3_deletes" && raw === "true") c.denyAwsS3Deletes = true;
     else w.push(`${where} sets ${optionPrefix}${optionName.toUpperCase()}="${raw}"; ignored: a repository can only make the guard stricter`);

@@ -6,6 +6,8 @@ A Claude Code plugin that keeps a session inside its own repository. When Claude
 
 It also keeps git worktrees where you can find them. A Bash `git worktree add` aimed outside the repository's `.claude/worktrees/` (a `/tmp` folder that later vanishes and leaves a stale record behind, a sibling directory) asks first, `/cyberine-devguard:worktrees` reports the stray, prunable and merged worktrees you already have, and the optional companion plugin `cyberine-worktree` routes every worktree Claude Code creates to `<main repository>/.claude/worktrees/<name>`.
 
+It also guards the machine you are working on. A `pkill node` or `pkill -f cat` that would stop other projects' servers, your editor, your apps and Claude Code itself is denied, and so are `killall Dock`, `kill -1` and `shutdown`. A kill by name, pattern or port, a tmux command on a session the agent did not create, a change to macOS system settings, `/etc/hosts`, launch agents or cron, a change to a physical phone, and an `rsync --delete` to a remote ask first. An app relaunched over and over in one session asks too (see [The running machine](#the-running-machine)).
+
 It exists because an agent that `cd`s into a neighbouring checkout, follows a symlink, or resolves `../other-repo/file` can edit a project nobody asked it to touch, and the permission prompt does not say "this is a different repository".
 
 ## Install
@@ -74,7 +76,10 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `isolate_worktrees` | `false` | ask before a session started in a linked worktree writes into the main checkout or another worktree of the same repository (file tools, Bash writes, MCP writes) |
 | `worktree_guard` | `true` | ask before a Bash `git worktree add` whose path lies outside the repository's `.claude/worktrees/` |
 | `danger_guard` | `true` | deny data-destroying Bash commands in every permission mode (see [Data-destroying commands](#data-destroying-commands)) |
-| `session_hint` | `true` | at session start, hand Claude three sentences on how to avoid a `danger_guard` denial (a literal path for a recursive `rm`, no destructive statements in text fed to an interpreter); off, or with `danger_guard` off, nothing is added |
+| `live_guard` | `true` | deny process kills and power commands that reach far beyond the session, and ask before commands that disrupt the user's running machine (see [The running machine](#the-running-machine)) |
+| `live_guard_desktop` | `false` | with `live_guard`, also ask before `pbcopy`, `say`, `afplay`, `cliclick`, `open` without `-g`, and AppleScript keystrokes, dialogs, volume, clipboard or `activate` |
+| `relaunch_limit` | `5` | with `live_guard`, ask before this session launches or brings the same app to the front more than this many times within 60 minutes (denied under `bypassPermissions`); `0` turns it off |
+| `session_hint` | `true` | at session start, hand Claude three sentences on how to avoid a `danger_guard` denial (a literal path for a recursive `rm`, no destructive statements in text fed to an interpreter) and, with `live_guard` on, one sentence on stopping processes by PID; off, or with both guards off, nothing is added |
 | `protected_branches` | `main`, `master`, `production`, `prod`, `development`, `develop`, `dev`, `release`, `staging` | branches a force-push to is denied |
 | `deny_aws_s3_deletes` | `true` | also deny `aws s3 rm`/`rb` and `aws s3api delete-*` |
 | `bypass_strict` | `false` | under `bypassPermissions`, deny every write to another repository instead of letting a retry through |
@@ -93,7 +98,8 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 
 - `mode` can only be raised (`off` < `warn` < `deny-once` < `ask`), never set to `off`.
 - `allowIgnored` and `allowIgnoredNestedRepos` can only be turned off.
-- `worktreeGuard`, `bashGuard`, `isolateWorktrees`, `dangerGuard`, `denyAwsS3Deletes` and `bypassStrict` can only be turned on.
+- `worktreeGuard`, `bashGuard`, `isolateWorktrees`, `dangerGuard`, `denyAwsS3Deletes`, `bypassStrict`, `liveGuard` and `liveGuardDesktop` can only be turned on.
+- `relaunchLimit` can only be lowered, to a whole number of at least 1.
 - `protectedBranches` adds branch names to the user's list; it cannot remove one.
 - `protect` lists paths relative to the repository; writes under them ask.
 - Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, `allowDangerEnv`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its committed `.claude/settings.json`.
@@ -132,7 +138,33 @@ The same checks run on the quoted text handed to `ssh`, `bash -c`, `sh -c`, `eva
 
 To run such a command, run it yourself, or start the session with `CY_ALLOW_DANGER=1` in its environment (or the variable you named in `allow_danger_env`). A value set through the `env` block of a repository's `.claude/settings.json` or `.claude/settings.local.json` is ignored, so a cloned repository cannot lift the guard. A repository file can turn the guard on and add protected branches, never turn it off.
 
-This is a pattern check on the command text, not a sandbox: a script file, an alias, or a program that deletes on its own is not seen. SQL read from a file (`mysql app < dump.sql`, `psql -f reset.sql`) and a delete written as code in `python -c` or `node -e` are not seen either (see [Limits](#limits)). It is the one part of Cyberine DevGuard that denies outright, because `bypassPermissions` skips every prompt and settings `deny` rules are the only other gate.
+This is a pattern check on the command text, not a sandbox: a script file, an alias, or a program that deletes on its own is not seen. SQL read from a file (`mysql app < dump.sql`, `psql -f reset.sql`) and a delete written as code in `python -c` or `node -e` are not seen either (see [Limits](#limits)). It and the deny list of `live_guard` (see [The running machine](#the-running-machine)) are the parts of Cyberine DevGuard that deny outright, because `bypassPermissions` skips every prompt and settings `deny` rules are the only other gate.
+
+## The running machine
+
+With `live_guard` on (the default), Cyberine DevGuard also reads each Bash command for things that disrupt the machine you are using rather than destroy data: the agent works in one repository, but a process kill, a tmux command or a system setting reaches everything else you have open. The reported cases behind it: `pkill -f "cat"` closed every macOS app (its pattern matches `/Applications` paths; on the author's Mac it matched 214 processes), an unscoped `pkill` stopped a sibling project's dev server, `pkill node` stopped Claude Code and VS Code, and a session relaunched the user's app about 80 times in 45 minutes and moved the user's tmux client to another session.
+
+Denied in every permission mode, like `danger_guard`, because they are always wrong for an agent:
+
+- `pkill` or `killall` (also `pgrep` inside `kill $(...)`) of a common process name (`node`, `python`, `bun`, `cat`, `bash`, `git`, `claude`, `code`, `Google Chrome`, `Safari`, `Slack`, terminal apps, `tmux`, `docker` and similar), of a pattern of three characters or fewer, or of a bare wildcard; `pkill -f` matches the whole command line, so `pkill -f cat` reaches every path that contains `cat`;
+- `pkill`/`killall` with a user or group and no name, `kill -1`, `kill 0`;
+- `killall` of a macOS system process (`Dock`, `Finder`, `SystemUIServer`, `WindowServer`, `cfprefsd`, `loginwindow`, `ControlCenter`, `NotificationCenter`, `launchd`);
+- `shutdown`, `reboot`, `halt`, `poweroff`, `systemctl poweroff`/`reboot`/`suspend`, `launchctl reboot`, and AppleScript that shuts down, restarts or logs out.
+
+Asked about (under `bypassPermissions`: denied once, and a retry within 10 minutes passes; `bypass_strict` keeps it denied):
+
+- other kills by name or pattern (`pkill -f "vite --port 4173"`, `killall MyApp`), kills by port or computed ids (`kill $(lsof -ti:3000)`, `lsof -ti:3000 | xargs kill`, `fuser -k`, `kill-port`), and process-group kills (`kill -- -<pgid>`). A kill by PID (`kill 4242`, `kill $SERVER_PID`, `kill "$(cat dev.pid)"`) passes;
+- tmux on your server: `switch-client`, `attach` (not `-r`), `kill-server`, `detach-client`, `lock-*`, `kill-session -a`, and every command that types into, rearranges or closes a session (`send-keys`, `kill-session`, `kill-window`, `select-window`, `rename-session` and the rest) unless its target is a session this Claude Code session created with `tmux new-session -s <name>`, or it runs on its own server (`tmux -L <name>` or `-S <path>`). Session names are remembered per session in the plugin data directory, and a name held in a variable is followed when the same command assigns it;
+- macOS settings: `defaults write`/`delete`/`import` to `com.apple.*` or the global domain, `networksetup -set*`, `scutil --set`, `pmset` (other than `-g`), `systemsetup -set*`, `tailscale down`/`up`/`logout`/`set`, `wg-quick`, `pfctl`, `ifconfig ... down`, `route add`/`delete`; writes to `/etc/hosts`;
+- jobs that outlive the session: `launchctl load`/`bootstrap`/`bootout`/`enable`/`kickstart` and similar, `crontab` other than `-l`, `brew services start`/`stop`/`restart`, `sfltool`, AppleScript `make login item`, and a write into a `LaunchAgents` or `LaunchDaemons` folder or a cron table (Bash, Write, Edit and filesystem MCP writes);
+- physical devices: `adb install`/`uninstall`/`reboot`/`root`, `adb shell am force-stop`/`pm clear`, `xcrun devicectl` with `uninstall` or `--terminate-existing`, `ios-deploy --uninstall`. An emulator (`adb -e`, `-s emulator-*`) and `xcrun simctl` pass;
+- `rsync --delete` (or `--remove-source-files`) to a remote `host:path` without `-n`/`--dry-run`; `systemctl stop`/`restart`/`disable` and similar;
+- AppleScript that quits an app;
+- an app launched or brought to the front (`open -a`, a `.app` path, AppleScript `activate`) more than `relaunch_limit` times in 60 minutes by one session. Under `bypassPermissions` this one is denied on every try, since the retries are the problem.
+
+With `live_guard_desktop` on, it also asks before `pbcopy`, `say`, `afplay`, `cliclick`, `terminal-notifier`, `open` without `-g`, and AppleScript that sends keystrokes or clicks, shows a dialog or notification, changes the volume or the clipboard, or calls `activate`.
+
+The same wrappers are followed as for `danger_guard` (`sudo`, `env`, `nohup`, `timeout`, `bash -c`, `ssh <host> '...'`, `eval`, `xargs`), and text-only commands and `git commit -m` messages pass. `CY_ALLOW_DANGER=1` (or your `allow_danger_env` variable) lifts it, and `live_guard` set to `false` turns it off. Like `danger_guard`, it reads command text only: a script, a build tool or an app that kills or relaunches on its own is not seen, and an app relaunched by a dev server's file watcher is not counted.
 
 ## Worktrees
 
@@ -178,7 +210,7 @@ Hooks run in Claude Code and Cowork; the claude.ai chat surface ignores hooks, s
 - The hooks make no network requests and send nothing anywhere. See `PRIVACY.md`. The one exception is the worktree report you run yourself: it calls your installed `gh` to look up pull requests for worktree branches, and `--no-gh` turns that off. `gh` runs with only `PATH`, home, temp and gh config-directory variables.
 - It does not read your conversation. With the default settings it never opens the session transcript; with `read_transcript` on it parses only the environment snapshot line (working directory and allowed directories) and the `/cd` record (the directory moved to), and keeps nothing else.
 - It reads, on your machine: the hook event Claude Code passes on stdin, `permissions.additionalDirectories` and `autoMemoryDirectory` from Claude Code settings files, the `env` keys for Cyberine DevGuard's own options in the session repository's `.claude/settings.json`, `.claude/cyberine-devguard.json` files at or above the session directory, the command line of the running `claude` process (`/proc/<pid>/cmdline` or `ps`, only for `--add-dir`) and its start directory (`~/.claude/sessions/<pid>.json`), and git metadata through `git rev-parse`, `git check-ignore` and `git ls-files`. Git runs without a shell, with `GIT_*` variables removed and `core.fsmonitor` disabled.
-- It writes only inside its plugin data directory (`~/.claude/plugins/data/<id>/`): `sessions/<session id>.json` (the directories added with `/add-dir` in that session, pruned after 7 days), `markers/` (empty files, `deny-once` mode only, pruned after 10 minutes) and, when `log_decisions` is on, `decisions.jsonl` (time, session id, tool, file path, verdict). Without a data directory, `deny-once` markers go to the system temp directory. Claude Code deletes the data directory when the plugin is uninstalled.
+- It writes only inside its plugin data directory (`~/.claude/plugins/data/<id>/`): `sessions/<session id>.json` (the directories added with `/add-dir` in that session, pruned after 7 days), `markers/` (empty files for `deny-once` mode and for `deny-once` answers under `bypassPermissions`, pruned after 10 minutes), `live/<hash of the session id>.json` (with `live_guard`: names of tmux sessions this session created and the times it launched each app in the last 60 minutes, pruned after 7 days) and, when `log_decisions` is on, `decisions.jsonl` (time, session id, tool, file path, verdict). Without a data directory, `deny-once` markers go to the system temp directory. Claude Code deletes the data directory when the plugin is uninstalled.
 - It reads no credentials. From the environment it takes only these named variables, picked once at startup, and never sees the rest: `HOME`, `USERPROFILE`, `CLAUDE_CONFIG_DIR`, `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_DATA`, `CLAUDE_CODE_SESSION_ID`, `CLAUDE_PID`, `CLAUDE_JOB_DIR`, `CLAUDE_COWORK_MEMORY_PATH_OVERRIDE` and its own `CLAUDE_PLUGIN_OPTION_*` settings. Git runs with only `PATH`, home, temp and locale variables.
 - It changes no settings and stores no personal data beyond those file paths.
 

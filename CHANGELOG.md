@@ -2,6 +2,13 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.10.0] - 2026-10-26
+
+- New `live_guard` (default on) for commands that disrupt the running machine rather than destroy data (D44). Denied in every permission mode: `pkill`/`killall` of a common process name (`node`, `cat`, `python`, `claude`, `Google Chrome`, terminal apps and similar), of a pattern of three characters or fewer, or by user with no name; `kill -1` and `kill 0`; `killall Dock`, `Finder`, `SystemUIServer` and other macOS system processes; `shutdown`, `reboot`, `systemctl poweroff`/`reboot`, `launchctl reboot` and AppleScript shut down or restart. Asked about, and denied once under `bypassPermissions`: other kills by name, pattern or port (`kill $(lsof -ti:3000)`, `xargs kill`, `fuser -k`, `kill-port`); tmux commands on sessions this session did not create (`switch-client`, `attach`, `kill-server`, `send-keys`, `kill-session` and the rest; `tmux -L`/`-S` and sessions made with `new-session -s` pass); `defaults write` to Apple or global domains, `networksetup`, `pmset`, `scutil --set`, VPN and firewall changes, `/etc/hosts`; `launchctl`, `crontab`, `brew services` and writes into `LaunchAgents`/`LaunchDaemons` (also through Write, Edit and filesystem MCP tools); `adb` and `xcrun devicectl` changes to a physical device; `rsync --delete` to a remote without `-n`; `systemctl stop`/`restart`. A kill by PID passes.
+- New `relaunch_limit` (default 5): an app launched or brought to the front more than that many times within 60 minutes by one session asks, and under `bypassPermissions` is denied on every try. `0` turns it off.
+- New `live_guard_desktop` (default off): asks before `pbcopy`, `say`, `afplay`, `cliclick`, `open` without `-g`, and AppleScript keystrokes, dialogs, volume, clipboard or `activate`.
+- The session hint gains one sentence for `live_guard`: stop a process by the PID the session started.
+
 ## [0.9.3] - 2026-10-17
 
 - Fixed: `session_hint` was missing from the plugin's `userConfig`, so 0.9.2 offered no way to turn the hint off from `/config`. The option is now listed with its default.

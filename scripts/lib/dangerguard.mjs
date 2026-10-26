@@ -70,7 +70,7 @@ const baseName = (p) => {
 };
 const isAssignment = (t) => t.includes("=") && !t.startsWith("=");
 
-function splitSubcommands(cmd) {
+export function splitSubcommands(cmd) {
   const parts = [];
   let cur = "";
   let q = "";
@@ -101,7 +101,7 @@ function splitSubcommands(cmd) {
   return parts;
 }
 
-function isTextOnly(sub) {
+export function isTextOnly(sub) {
   let toks = fields(sub);
   while (toks.length && (isAssignment(toks[0]) || toks[0] === "sudo" || toks[0] === "env" || toks[0] === "time")) toks = toks.slice(1);
   if (!toks.length) return true;
@@ -136,7 +136,7 @@ function isWrapper(sub) {
   return false;
 }
 
-function quotedStrings(sub) {
+export function quotedStrings(sub) {
   const out = [];
   let cur = "";
   let q = "";
@@ -183,7 +183,7 @@ function stripQuotedArgs(sub) {
   return b;
 }
 
-function unquotedAt(line, index) {
+export function unquotedAt(line, index) {
   const stack = [];
   for (let i = 0; i < index; i++) {
     const c = line[i];
@@ -235,7 +235,7 @@ function leadingBin(text) {
   return toks.length ? baseName(toks[0]) : "";
 }
 
-function stripTextHeredocs(cmd) {
+export function stripTextHeredocs(cmd) {
   const lines = cmd.split("\n");
   const out = [];
   for (let i = 0; i < lines.length; i++) {
@@ -261,7 +261,7 @@ function stripTextHeredocs(cmd) {
   return out.join("\n");
 }
 
-function stripCommentLines(cmd) {
+export function stripCommentLines(cmd) {
   return cmd
     .split("\n")
     .filter((l) => !l.trim().startsWith("#"))
