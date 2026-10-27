@@ -2,6 +2,14 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.11.0] - 2026-10-27
+
+- `danger_guard` lets a recursive `rm` through below the nearest folder with a valid `CACHEDIR.TAG` or a regenerable name (`target/debug/bundle/...`, `<repo>/tmp/exp1`), never past the session repository root, `$HOME` or another repository's root (D45). A peer survey found the one real cleanup block was a stale bundle under cargo's `target/`, which cargo tags only at its root.
+- The regenerable-name allowance no longer covers a folder directly in `$HOME` (`~/node_modules`), anything inside `.git`, or a repository root named like a build folder.
+- Fewer false positives: quoted arguments of `cyberine`, `glab` and `linear` are not scanned; `2>&1` or `2>/dev/null` after a command that reads a `CACHEDIR.TAG` is not a tag write; `live_guard` lets `sfltool dumpbtm` through.
+- A denial now says when it matched inside a heredoc body fed to an interpreter or a quoted string handed to a wrapper, so an agent can tell data from a command.
+- The session hint names where scratch work goes so it can be deleted later: a `mktemp -d` dir, `$CLAUDE_JOB_DIR/tmp` or `<repo>/tmp/`.
+
 ## [0.10.0] - 2026-10-26
 
 - New `live_guard` (default on) for commands that disrupt the running machine rather than destroy data (D44). Denied in every permission mode: `pkill`/`killall` of a common process name (`node`, `cat`, `python`, `claude`, `Google Chrome`, terminal apps and similar), of a pattern of three characters or fewer, or by user with no name; `kill -1` and `kill 0`; `killall Dock`, `Finder`, `SystemUIServer` and other macOS system processes; `shutdown`, `reboot`, `systemctl poweroff`/`reboot`, `launchctl reboot` and AppleScript shut down or restart. Asked about, and denied once under `bypassPermissions`: other kills by name, pattern or port (`kill $(lsof -ti:3000)`, `xargs kill`, `fuser -k`, `kill-port`); tmux commands on sessions this session did not create (`switch-client`, `attach`, `kill-server`, `send-keys`, `kill-session` and the rest; `tmux -L`/`-S` and sessions made with `new-session -s` pass); `defaults write` to Apple or global domains, `networksetup`, `pmset`, `scutil --set`, VPN and firewall changes, `/etc/hosts`; `launchctl`, `crontab`, `brew services` and writes into `LaunchAgents`/`LaunchDaemons` (also through Write, Edit and filesystem MCP tools); `adb` and `xcrun devicectl` changes to a physical device; `rsync --delete` to a remote without `-n`; `systemctl stop`/`restart`. A kill by PID passes.

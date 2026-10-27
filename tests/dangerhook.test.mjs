@@ -104,7 +104,7 @@ test("the danger check runs before the write-shape check", () => {
 test("the hook reads CLAUDE_CONFIG_DIR, so a profile session can clear its own expanded job dir", () => {
   const a = session();
   const cfg = "/Users/devguard-test/.claude-profiles/ktt";
-  const target = `rm -rf ${cfg}/jobs/abc123/tmp/x`;
+  const target = `rm -rf ${cfg}/jobs/abc123/x`;
   assert.equal(bash(a, target, isolatedEnv({ CLAUDE_CONFIG_DIR: cfg })), null);
   assert.equal(decisionOf(bash(a, target, isolatedEnv({}))), "deny");
 });

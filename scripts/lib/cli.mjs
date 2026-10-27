@@ -12,7 +12,7 @@ import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
 import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
-import { isCacheDir } from "./cachedir.mjs";
+import { isCacheDir, isRepoRoot } from "./cachedir.mjs";
 import { dangerReason, ESCAPE_ENV, isCacheDirTagPath, TAG_WRITE_REASON } from "./dangerguard.mjs";
 import { liveCheck, liveFileReason } from "./liveguard.mjs";
 import { countLaunches, liveStateDir, loadLiveState, RELAUNCH_WINDOW_MS, saveLiveState } from "./livestate.mjs";
@@ -61,6 +61,7 @@ function logDecision(env, input, verdict, out, now) {
 export const SESSION_HINT = [
   `${pluginName} denies data-destroying Bash commands in every permission mode; a command that is really needed goes to the user to run. To avoid a denial:`,
   "- Recursive rm: write the full target path literally, never through a variable or command substitution; the guard cannot resolve those and denies them.",
+  "- Put scratch files in a `mktemp -d` dir, $CLAUDE_JOB_DIR/tmp or <repo>/tmp/; those, and paths below a build or cache dir, may be deleted.",
   "- Text handed to an interpreter or database client (a shell, a remote shell, an SQL client, an inline script) is scanned like a command, so a statement that drops or empties a table, or a recursive delete, inside that text is denied. Write such text to a file with a plain cat heredoc first; that body is not scanned.",
 ].join("\n");
 
@@ -117,7 +118,7 @@ function bashHook(input, env, deps, now) {
   const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : sessionRoot;
   const home = env.HOME || env.USERPROFILE || "";
   const config = loadConfig({ env, sessionRoot });
-  const danger = dangerCheck(command, { env, config, sessionRoot, home });
+  const danger = dangerCheck(command, { env, config, sessionRoot, home, cwd });
   if (danger) return danger;
   const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
   if (live) return live;
@@ -152,9 +153,9 @@ function escapeOpen(env, config, sessionRoot) {
   return { open: false, warnings };
 }
 
-function dangerCheck(command, { env, config, sessionRoot, home }) {
+function dangerCheck(command, { env, config, sessionRoot, home, cwd = "" }) {
   if (!config.dangerGuard) return null;
-  const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes, isCacheDir: (dir) => isCacheDir(dir, { home }) });
+  const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd });
   return dangerOut(reason, { env, config, sessionRoot });
 }
 

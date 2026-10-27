@@ -40,7 +40,7 @@ test("a per-account profile's expanded jobs dir is a tmp target when CLAUDE_CONF
   const configDir = `${home}/.claude-profiles/ktt`;
   assert.equal(dangerReason(`rm -rf ${configDir}/jobs/abc123/tmp/x`, { home, configDir }), "");
   assert.equal(dangerReason(`rm -rf ${configDir}/jobs/abc123/tmp/x`, { home, configDir: configDir + "/" }), "");
-  assert.notEqual(dangerReason(`rm -rf ${configDir}/jobs/abc123/tmp/x`, { home }), "");
+  assert.notEqual(dangerReason(`rm -rf ${configDir}/jobs/abc123/x`, { home }), "");
   assert.notEqual(dangerReason(`rm -rf ${home}/.claude-profiles/ft/jobs/abc123/x`, { home, configDir }), "");
   assert.notEqual(dangerReason(`rm -rf ${configDir}/projects`, { home, configDir }), "");
   assert.notEqual(dangerReason(`rm -rf ${configDir}/jobs/../settings.json`, { home, configDir }), "");

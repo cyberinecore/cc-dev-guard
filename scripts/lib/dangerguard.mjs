@@ -59,7 +59,7 @@ const REGENERABLE_DIRS =new Set(["node_modules", "dist", "build", "out", ".next"
 const TEXT_TOOLS = new Set(["echo", "printf", "grep", "rg", "egrep", "fgrep", "ugrep", "sed", "awk", "cat", "head", "tail", "less", "more", "wc", "sort", "uniq", "cut", "tr", "diff", "comm", "tee", "jq", "yq", "column", "fold", "nl", "od", "xxd"]);
 const GIT_TEXT_SUBCOMMANDS = new Set(["log", "grep", "show", "diff", "blame"]);
 const WRAPPER_BINS = new Set(["ssh", "bash", "sh", "zsh", "eval", "xargs", "sudo", "nohup", "timeout", "gtimeout", "caffeinate", "env", "script"]);
-const QUOTED_ARG_BINS = new Set(["git", "gh", "jira", "curl"]);
+const QUOTED_ARG_BINS = new Set(["git", "gh", "glab", "jira", "linear", "curl", "cyberine"]);
 const HEREDOC_SINK_BINS = new Set(["cat", "tee"]);
 
 const fields = (s) => s.split(/\s+/).filter(Boolean);
@@ -268,9 +268,9 @@ export function stripCommentLines(cmd) {
     .join("\n");
 }
 
-export function dangerReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true, isCacheDir = null } = {}) {
+export function dangerReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true, isCacheDir = null, isRepoRoot = null, root = "", cwd = "" } = {}) {
   if (typeof command !== "string" || command === "") return "";
-  const opts = { home, configDir, protectedBranches: new Set(protectedBranches), awsS3, isCacheDir };
+  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), awsS3, isCacheDir, isRepoRoot, root, cwd };
   return tagWriteShapeReason(command) || guardDepth(command, 0, opts);
 }
 
@@ -284,34 +284,69 @@ function tagWriteShapeReason(cmd) {
   for (const sub of splitSubcommands(stripCommentLines(stripTextHeredocs(cmd)))) {
     if (!reTagMention.test(sub)) continue;
     const [bin] = firstBin(sub);
-    if (unquotedRedirect(sub) || TAG_WRITE_BINS.has(bin)) return TAG_WRITE_REASON;
+    if (tagRedirect(sub) || TAG_WRITE_BINS.has(bin)) return TAG_WRITE_REASON;
   }
   return "";
 }
 
-function unquotedRedirect(sub) {
-  for (let i = sub.indexOf(">"); i >= 0; i = sub.indexOf(">", i + 1)) if (unquotedAt(sub, i)) return true;
+function tagRedirect(sub) {
+  for (let i = sub.indexOf(">"); i >= 0; i = sub.indexOf(">", i + 1)) {
+    if (!unquotedAt(sub, i)) continue;
+    let j = i + 1;
+    if (sub[j] === ">" || sub[j] === "|") j++;
+    if (sub[j] === "&") continue;
+    const m = /^\s*("[^"]*"|'[^']*'|[^\s;&|<>]+)/.exec(sub.slice(j));
+    const target = m ? m[1].replace(/^["']|["']$/g, "") : "";
+    if (target === "/dev/null" || target === "/dev/stderr" || target === "/dev/stdout") continue;
+    if (target === "") continue;
+    if (reTagMention.test(target) || target.includes("$") || target.includes("`")) return true;
+  }
   return false;
 }
 
+const HEREDOC_NOTE = " The match is in a heredoc body fed to an interpreter; if that text is data written into a file, write the file with a plain cat heredoc first.";
+const QUOTED_NOTE = (bin) => ` The match is inside a quoted string handed to \`${bin}\`, which runs it as a command.`;
+
 function guardDepth(cmd, depth, opts) {
   if (depth > 3) return "";
+  const stripped = stripCommentLines(stripTextHeredocs(cmd));
+  const bodies = depth === 0 ? heredocBodyLines(stripped) : [];
+  const inBody = (text) => bodies.some((l) => l.includes(text.trim()));
   const scans = [];
-  for (const sub of splitSubcommands(stripCommentLines(stripTextHeredocs(cmd)))) {
+  for (const sub of splitSubcommands(stripped)) {
     if (isTextOnly(sub)) continue;
     const [bin] = firstBin(sub);
     const scan = QUOTED_ARG_BINS.has(bin) ? stripQuotedArgs(sub) : sub;
     scans.push(scan);
     const r = subcommandReason(scan, opts);
-    if (r) return r;
+    if (r) return inBody(sub) ? r + HEREDOC_NOTE : r;
     if (isWrapper(sub)) {
       for (const inner of quotedStrings(sub)) {
         const ri = guardDepth(inner, depth + 1, opts);
-        if (ri) return ri;
+        if (ri) return depth === 0 ? ri + QUOTED_NOTE(bin) : ri;
       }
     }
   }
-  return sqlDeleteReason(scans.join("\n"));
+  const sql = sqlDeleteReason(scans.join("\n"));
+  const reDeleteOnce = new RegExp(reSQLDelete.source, "i");
+  return sql && bodies.some((l) => reDeleteOnce.test(l)) ? sql + HEREDOC_NOTE : sql;
+}
+
+function heredocBodyLines(cmd) {
+  const lines = cmd.split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = [...lines[i].matchAll(reHeredoc)][0];
+    if (!m) continue;
+    for (let j = i + 1; j < lines.length; j++) {
+      if ((m[1] === "-" ? lines[j].replace(/^\t+/, "") : lines[j]) === m[3]) {
+        i = j;
+        break;
+      }
+      out.push(lines[j]);
+    }
+  }
+  return out;
 }
 
 function subcommandReason(s, opts) {
@@ -447,19 +482,61 @@ function rmReason(cmd, opts) {
 
 const VAR_OK = ["$CLAUDE_JOB_DIR", "$TMPDIR", "${CLAUDE_JOB_DIR", "${TMPDIR"];
 
-function rmTargetReason(raw, { home, configDir, isCacheDir }) {
+function rmTargetReason(raw, { home, configDir, isCacheDir, isRepoRoot, root = "", cwd = "" }) {
   const t = raw.replace(/^["']+|["']+$/g, "");
   if (t === "") return "";
   if (t.startsWith("$") && !VAR_OK.some((p) => t.startsWith(p))) return `recursive rm of \`${raw}\` is denied: the target is a shell variable the guard cannot resolve; write the literal path.`;
   if (t === "*" || t === "." || t === ".." || t === "/" || t === "~" || t === "~/" || t.startsWith("../") || (t.endsWith("/*") && (t.startsWith("/") || t.startsWith("~")) && !isTmpPath(t, home, configDir))) return `recursive rm of \`${raw}\` is denied.`;
   const base = baseName(t.endsWith("/") ? t.slice(0, -1) : t);
   if (base === ".git") return `recursive rm of \`${raw}\` is denied (it destroys the repository's history).`;
-  if (REGENERABLE_DIRS.has(base) || isTmpPath(t, home, configDir) || t.includes("/.claude/worktrees/")) return "";
-  if (!t.startsWith("/") && !t.startsWith("~") && !t.startsWith("$")) return "";
+  if (isTmpPath(t, home, configDir) || t.includes("/.claude/worktrees/")) return "";
+  const relative = !t.startsWith("/") && !t.startsWith("~") && !t.startsWith("$");
   const expanded = t.startsWith("~") ? home + t.slice(1) : t;
+  const abs = relative ? (cwd.startsWith("/") ? joinPosix(cwd, t) : "") : expanded.replace(/\/+$/, "") || "/";
+  if (REGENERABLE_DIRS.has(base)) {
+    const why = abs ? regenerableExclusion(abs, { home, isRepoRoot: cacheDirCandidate(raw, abs) ? isRepoRoot : null }) : "";
+    if (!why) return "";
+    return `recursive rm of \`${raw}\` is denied: ${why}.`;
+  }
+  if (relative) return "";
   if (home && (expanded === home || expanded === home + "/")) return "recursive rm of the home directory is denied.";
-  if (isCacheDir && cacheDirCandidate(raw, expanded) && isCacheDir(expanded.replace(/\/+$/, ""))) return "";
-  return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, regenerable build/cache dirs and directories carrying a CACHEDIR.TAG are allowed).`;
+  if (cacheDirCandidate(raw, expanded)) {
+    if (isCacheDir && isCacheDir(abs)) return "";
+    if (scratchAncestor(abs, { home, root, isCacheDir, isRepoRoot })) return "";
+  }
+  return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, regenerable build/cache dirs, directories carrying a CACHEDIR.TAG, and paths below one of those inside the repository or home are allowed).`;
+}
+
+function joinPosix(dir, rel) {
+  const out = dir.replace(/\/+$/, "").split("/");
+  for (const seg of rel.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") out.pop();
+    else out.push(seg);
+  }
+  return out.join("/") || "/";
+}
+
+const dirNamePosix = (p) => {
+  const i = p.lastIndexOf("/");
+  return i <= 0 ? "/" : p.slice(0, i);
+};
+
+function regenerableExclusion(abs, { home, isRepoRoot }) {
+  if (abs.split("/").includes(".git")) return "it is inside a `.git` directory";
+  if (home && dirNamePosix(abs) === home.replace(/\/+$/, "")) return "a folder directly in the home directory is not treated as a build or cache directory";
+  if (isRepoRoot && isRepoRoot(abs)) return "it is the root of a git repository, not a build or cache directory inside one";
+  return "";
+}
+
+function scratchAncestor(abs, { home, root, isCacheDir, isRepoRoot }) {
+  const stops = new Set(["/", home.replace(/\/+$/, ""), root.replace(/\/+$/, "")].filter(Boolean));
+  for (let dir = dirNamePosix(abs); !stops.has(dir); dir = dirNamePosix(dir)) {
+    if (isRepoRoot && isRepoRoot(dir)) return false;
+    if (REGENERABLE_DIRS.has(baseName(dir)) && !regenerableExclusion(dir, { home, isRepoRoot })) return true;
+    if (isCacheDir && isCacheDir(dir)) return true;
+  }
+  return false;
 }
 
 function cacheDirCandidate(raw, expanded) {

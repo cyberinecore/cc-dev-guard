@@ -278,6 +278,7 @@ function judge({ bin, args, viaXargs }, sub, vars, ctx, depth) {
       if (a[0] === "services" && ["start", "stop", "restart", "run", "kill", "cleanup"].includes(a[1])) push(ask("brew-services", `\`brew services ${a[1]}\` starts or stops a background service through launchd, which outlives this session.`));
       return;
     case "sfltool":
+      if (readOnlySfltool(a)) return;
       return push(ask("sfltool", "`sfltool` changes login items and background task records."));
     case "adb":
       return push(adb(a));
@@ -616,4 +617,17 @@ export function liveFileReason(path, home = "") {
   if (reLaunchdPath.test(p)) return `\`${path}\` is in a LaunchAgents or LaunchDaemons folder: a job there starts on its own and outlives this session.`;
   if (/^(\/private)?\/(usr\/lib\/cron\/tabs|var\/at\/tabs)\//.test(p)) return `\`${path}\` is a cron table: a job there runs after this session ends.`;
   return "";
+}
+
+function readOnlySfltool(args) {
+  const plain = [];
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i];
+    if (/^(\d*|&)>>?/.test(w) || /^\d*</.test(w)) {
+      if (/^(\d*|&)>>?$/.test(w) || /^\d*<$/.test(w)) i++;
+      continue;
+    }
+    plain.push(w);
+  }
+  return plain.length > 0 && plain.every((w) => w === "dumpbtm" || w === "-h" || w === "--help");
 }

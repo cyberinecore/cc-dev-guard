@@ -32,3 +32,12 @@ export function isCacheDir(dir, { home = "" } = {}) {
     if (fd !== undefined) closeSync(fd);
   }
 }
+
+export function isRepoRoot(dir) {
+  try {
+    lstatSync(join(dir, ".git"));
+    return true;
+  } catch {
+    return false;
+  }
+}
