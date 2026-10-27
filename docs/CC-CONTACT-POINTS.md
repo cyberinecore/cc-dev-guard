@@ -32,5 +32,7 @@ Every place where this plugin depends on Claude Code behaviour. `cc-plugin-compa
 | `userConfig` fields (string, boolean, `multiple: true` string list), `CLAUDE_PLUGIN_OPTION_*` | .claude-plugin/plugin.json, scripts/lib/config.mjs | | an option is refused or unset |
 | Manifest keys (`displayName`, `$schema`, `keywords` in both; `privacyPolicyUrl` in .claude-plugin/plugin.json only) | both plugin.json | | install, listing or strict validation fails |
 | Marketplace entries, `source` `./` and `./plugins/cyberine-worktree`, `category` | .claude-plugin/marketplace.json | | install fails |
+| `claude --worktree <name>` at launch runs plugin `WorktreeCreate` hooks (not up to 2.1.287; yes on 2.1.311) | plugins/cyberine-worktree/, README cyberine-worktree section | | launch worktrees fall back to built-in creation and branch `worktree-<name>` |
+| Claude Code's own dangerous-rm prompt and the env vars that lift it (`CLAUDE_CODE_EVEN_MORE_DANGEROUSLY_SKIP_PERMISSIONS` from 2.1.311 in bypassPermissions, cleared by any `PermissionRequest` hook or a Bash content rule; `CLAUDE_CODE_DISABLE_*_RM_PROMPT`) | scripts/lib/dangerguard.mjs, README Limits | | danger_guard becomes the only layer before a destructive `rm` without the README saying so |
 
-Last verified: 2.1.289 (Claude Code), 2026-10-04
+Last verified: 2.1.311 (Claude Code), 2026-10-27

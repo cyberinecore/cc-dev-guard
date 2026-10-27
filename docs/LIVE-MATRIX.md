@@ -58,6 +58,8 @@ Two hooks answering the same write (measured the same day, `acceptEdits`): devgu
 
 A plugin `WorktreeCreate` hook is not loaded yet when `claude --worktree` creates its worktree at launch; a hook in `--settings` is (measured the same day by the owner's `~/.claude` session, which also measured that two `WorktreeCreate` hooks run in parallel and that an empty stdout fails creation). A first run of the Bash rows the same day is discarded: the prompt ended in "CMD ." and the model passed the dot to git as a commit-ish.
 
+Re-run on 2.1.311 (Claude Code), model haiku, 2026-10-27T01:22Z: `cli-w-plain` gave `plain/.claude/worktrees/probe [worktree/probe]` and `cli-w-submodule` gave `outer/sub/.claude/worktrees/subprobe [worktree/subprobe]`, so the plugin hook now runs for `claude --worktree` at launch. Versions between 2.1.287 and 2.1.311 were not measured. Every other row matched the table above, with the same `git worktree add` reasons on the three held Bash rows.
+
 ## Bash, MCP and worktree-isolation rows
 
 `tests/live/bash-mcp.sh`: throwaway repositories `a` (session, with a linked worktree `a/.claude/worktrees/w`) and `b` (other). The MCP rows run `@modelcontextprotocol/server-filesystem` through `npx` with `--mcp-config`. The reason column is cut.

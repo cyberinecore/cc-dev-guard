@@ -178,7 +178,7 @@ Agents tend to create extra git worktrees in scratch folders. When the folder go
 claude plugin install cyberine-worktree@cyberine-devguard
 ```
 
-Disable any other `WorktreeCreate` hook first: Claude Code runs every `WorktreeCreate` hook in parallel, and a second hook that picks a different path or branch leaves an orphan worktree. On Claude Code 2.1.287, `claude --worktree <name>` at launch still uses the built-in creation (branch `worktree-<name>`), because plugin hooks load after that worktree is made; a `WorktreeCreate` hook in `settings.json` does run there.
+Disable any other `WorktreeCreate` hook first: Claude Code runs every `WorktreeCreate` hook in parallel, and a second hook that picks a different path or branch leaves an orphan worktree. On Claude Code 2.1.311, `claude --worktree <name>` at launch runs this plugin's hook too (branch `worktree/<name>`); up to at least 2.1.287 it used the built-in creation (branch `worktree-<name>`), because plugin hooks loaded after that worktree was made.
 
 ## Commands
 
