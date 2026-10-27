@@ -71,7 +71,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts) |
 | `allow_ignored` | `true` | let writes to paths the other repository gitignores pass |
 | `allow_ignored_nested_repos` | `true` | let writes into a git repository nested inside the session repository under a path the session repository gitignores pass (an agent's scratch repository in `.local/tmp/`); off: ask like any other repository |
-| `log_decisions` | `false` | append each crossing (time, session id, tool, path, verdict) to `decisions.jsonl` in the plugin data directory |
+| `log_decisions` | `false` | append each crossing (time, session id, tool, path, verdict), and each `danger_guard`, `live_guard` or internal-error stop (guard, verdict, reason, the command with secret-looking values masked and `$HOME` shortened to `~`), to `decisions.jsonl` in the plugin data directory; nothing is sent anywhere |
 | `bash_guard` | `true` | read each Bash command for obvious writes (see [Bash and MCP writes](#bash-and-mcp-writes)) and treat each target like a file-tool write |
 | `isolate_worktrees` | `false` | ask before a session started in a linked worktree writes into the main checkout or another worktree of the same repository (file tools, Bash writes, MCP writes) |
 | `worktree_guard` | `true` | ask before a Bash `git worktree add` whose path lies outside the repository's `.claude/worktrees/` |

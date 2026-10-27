@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.11.1] - 2026-10-27
+
+- With `log_decisions` on, `decisions.jsonl` now also records every `danger_guard`, `live_guard` and internal-error stop: the guard, verdict, reason, plugin version and, for Bash, the command with values that look like tokens, passwords or keys masked and `$HOME` shortened to `~` (D46). Until now only cross-repository verdicts were logged.
+
 ## [0.11.0] - 2026-10-27
 
 - `danger_guard` lets a recursive `rm` through below the nearest folder with a valid `CACHEDIR.TAG` or a regenerable name (`target/debug/bundle/...`, `<repo>/tmp/exp1`), never past the session repository root, `$HOME` or another repository's root (D45). A peer survey found the one real cleanup block was a stale bundle under cargo's `target/`, which cargo tags only at its root.

@@ -17,7 +17,7 @@ Inside its Claude Code plugin data directory (`~/.claude/plugins/data/<id>/`):
 - the directories you added with `/add-dir`, per session, deleted after 7 days;
 - empty marker files for `deny-once` answers, deleted after 10 minutes;
 - with `live_guard` on (the default): per session, the names of tmux sessions that session created and the times it launched each app within the last 60 minutes, deleted after 7 days;
-- only if you turn on `log_decisions`: one line per stopped write with the time, session id, tool, file path and verdict, kept until you delete it or uninstall the plugin.
+- only if you turn on `log_decisions`: one line per stopped write with the time, session id, tool, file path and verdict, and one line per `danger_guard`, `live_guard` or internal-error stop with the guard, verdict, reason and the command (values that look like tokens, passwords or keys are masked, `$HOME` is shortened to `~`, at most 400 characters), kept until you delete it or uninstall the plugin.
 
 Claude Code deletes the data directory when you uninstall the plugin (unless you pass `--keep-data`).
 

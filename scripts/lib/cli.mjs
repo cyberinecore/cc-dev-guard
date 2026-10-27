@@ -58,6 +58,35 @@ function logDecision(env, input, verdict, out, now) {
   } catch {}
 }
 
+const SECRET_NAME = /\b([A-Za-z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|PASS|API_?KEY|AUTH|CREDENTIAL|PRIVATE_?KEY)[A-Za-z0-9_]*=)("[^"]*"|'[^']*'|\S+)/gi;
+
+export function redactCommand(command, home = "") {
+  let s = String(command);
+  if (home) s = s.split(home).join("~");
+  s = s
+    .replace(SECRET_NAME, "$1***")
+    .replace(/(:\/\/)[^\/\s:@]+:[^@\s]+@/g, "$1***@")
+    .replace(/\b(Bearer|Basic|token)\s+[^\s"']+/gi, "$1 ***")
+    .replace(/(--(?:password|token|secret|api-key|key)[=\s]+)("[^"]*"|'[^']*'|\S+)/gi, "$1***")
+    .replace(/[A-Za-z0-9_+=-]{32,}/g, "***");
+  return s.length > 400 ? s.slice(0, 400) + "..." : s;
+}
+
+function logGuard(env, config, input, guard, out, now) {
+  if (!config?.logDecisions || !out || !isAbsolute(env.CLAUDE_PLUGIN_DATA || "")) return;
+  try {
+    mkdirSync(env.CLAUDE_PLUGIN_DATA, { recursive: true });
+    const home = env.HOME || env.USERPROFILE || "";
+    const reason = String(out.hookSpecificOutput?.permissionDecisionReason || out.systemMessage || "");
+    const line = { time: new Date(now).toISOString(), session: input?.session_id ?? "", tool: input?.tool_name ?? "", guard, verdict: verdictWord(out), reason: redactCommand(reason, home).slice(0, 300), version: VERSION };
+    const command = input?.tool_input?.command;
+    if (typeof command === "string") line.command = redactCommand(command, home);
+    const path = input?.tool_input?.file_path || input?.tool_input?.notebook_path || input?.tool_input?.path;
+    if (typeof path === "string") line.target = home ? path.split(home).join("~") : path;
+    appendFileSync(join(env.CLAUDE_PLUGIN_DATA, "decisions.jsonl"), JSON.stringify(line) + "\n", { mode: 0o600 });
+  } catch {}
+}
+
 export const SESSION_HINT = [
   `${pluginName} denies data-destroying Bash commands in every permission mode; a command that is really needed goes to the user to run. To avoid a denial:`,
   "- Recursive rm: write the full target path literally, never through a variable or command substitution; the guard cannot resolve those and denies them.",
@@ -90,16 +119,20 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
     const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
     const config = loadConfig({ env, sessionRoot });
     const tag = tagWriteCheck([input.tool_input?.file_path, input.tool_input?.notebook_path], { env, config, sessionRoot });
-    if (tag) return tag;
+    if (tag) return logGuard(env, config, input, "danger", tag, now), tag;
     const liveFile = liveFileCheck([input.tool_input?.file_path, input.tool_input?.notebook_path], input, { env, config, sessionRoot, now });
-    if (liveFile) return liveFile;
+    if (liveFile) return logGuard(env, config, input, "live", liveFile, now), liveFile;
     if (config.mode === "off") return null;
     const verdict = (deps.decide || decide)(input, { sessionRoot, env, config });
     const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
     if (config.logDecisions && verdict.action === "cross") logDecision(env, input, verdict, out, now);
     return out;
   } catch (e) {
-    return renderError(e, input);
+    const out = renderError(e, input);
+    try {
+      logGuard(env, loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, input?.cwd) }), input, "error", out, now);
+    } catch {}
+    return out;
   }
 }
 
@@ -119,9 +152,9 @@ function bashHook(input, env, deps, now) {
   const home = env.HOME || env.USERPROFILE || "";
   const config = loadConfig({ env, sessionRoot });
   const danger = dangerCheck(command, { env, config, sessionRoot, home, cwd });
-  if (danger) return danger;
+  if (danger) return logGuard(env, config, input, "danger", danger, now), danger;
   const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
-  if (live) return live;
+  if (live) return logGuard(env, config, input, "live", live, now), live;
   const writes = findWrites(command, { cwd, home });
   const worktree = mentionsWorktree(command);
   if (!writes.length && !worktree) return null;
@@ -218,9 +251,9 @@ function mcpHook(input, env, deps, now) {
   const sessionRoot = sessionRootOf(env.CLAUDE_PROJECT_DIR, input.cwd);
   const config = loadConfig({ env, sessionRoot });
   const tag = tagWriteCheck(targets.map((t) => t.path), { env, config, sessionRoot });
-  if (tag) return tag;
+  if (tag) return logGuard(env, config, input, "danger", tag, now), tag;
   const liveFile = liveFileCheck(targets.map((t) => t.path), input, { env, config, sessionRoot, now });
-  if (liveFile) return liveFile;
+  if (liveFile) return logGuard(env, config, input, "live", liveFile, now), liveFile;
   if (config.mode === "off") return null;
   const git = deps.git || makeGit();
   for (const t of targets) {
