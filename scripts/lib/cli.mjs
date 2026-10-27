@@ -79,8 +79,6 @@ function logGuard(env, config, input, guard, out, now) {
     const home = env.HOME || env.USERPROFILE || "";
     const reason = String(out.hookSpecificOutput?.permissionDecisionReason || out.systemMessage || "");
     const line = { time: new Date(now).toISOString(), session: input?.session_id ?? "", tool: input?.tool_name ?? "", guard, verdict: verdictWord(out), reason: redactCommand(reason, home).slice(0, 300), version: VERSION };
-    const command = input?.tool_input?.command;
-    if (typeof command === "string") line.command = redactCommand(command, home);
     const path = input?.tool_input?.file_path || input?.tool_input?.notebook_path || input?.tool_input?.path;
     if (typeof path === "string") line.target = home ? path.split(home).join("~") : path;
     appendFileSync(join(env.CLAUDE_PLUGIN_DATA, "decisions.jsonl"), JSON.stringify(line) + "\n", { mode: 0o600 });

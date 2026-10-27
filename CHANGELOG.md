@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.11.2] - 2026-10-27
+
+- `decisions.jsonl` no longer stores the Bash command of a `danger_guard` or `live_guard` stop, only the guard, verdict and the reason shown to Claude (D46). The Anthropic Software Directory Policy does not allow collecting extraneous conversation data, even for logging.
+
 ## [0.11.1] - 2026-10-27
 
 - With `log_decisions` on, `decisions.jsonl` now also records every `danger_guard`, `live_guard` and internal-error stop: the guard, verdict, reason, plugin version and, for Bash, the command with values that look like tokens, passwords or keys masked and `$HOME` shortened to `~` (D46). Until now only cross-repository verdicts were logged.

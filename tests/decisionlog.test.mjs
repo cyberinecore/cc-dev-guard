@@ -15,7 +15,7 @@ function setup(log = "true") {
   return { a, env, run, lines };
 }
 
-test("log_decisions records danger_guard and live_guard denials with the guard, reason and a redacted command", () => {
+test("log_decisions records danger_guard and live_guard denials with the guard and reason, never the command", () => {
   const { run, lines, env } = setup();
   run("Bash", { command: "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789 git reset --hard HEAD" });
   run("Bash", { command: "pkill node" });
@@ -23,10 +23,10 @@ test("log_decisions records danger_guard and live_guard denials with the guard, 
   assert.equal(danger.guard, "danger");
   assert.equal(danger.verdict, "deny");
   assert.match(danger.reason, /git reset --hard/);
-  assert.match(danger.command, /GITHUB_TOKEN=\*\*\* git reset --hard HEAD/);
-  assert.doesNotMatch(JSON.stringify(danger), /ghp_/);
+  assert.equal(danger.command, undefined);
+  assert.doesNotMatch(JSON.stringify(danger), /ghp_|GITHUB_TOKEN/);
   assert.equal(live.guard, "live");
-  assert.equal(live.command, "pkill node");
+  assert.equal(live.command, undefined);
   assert.ok(danger.version);
   assert.doesNotMatch(JSON.stringify(lines()), new RegExp(env.HOME));
 });
