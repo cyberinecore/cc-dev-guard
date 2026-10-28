@@ -63,7 +63,9 @@ test("a recursive rm of an absolute tagged directory passes; untagged, unbalance
   assert.equal(run("rm -rf ~/WORK/app/.swift-build"), "");
   assert.equal(run("find /Users/me/WORK/app/.swift-build -delete"), "");
   assert.match(run("rm -rf /Users/me/WORK/app/src"), /CACHEDIR\.TAG/);
-  assert.notEqual(run('rm -rf "/Users/me/WORK/app/cache dir"'), "");
+  assert.equal(run('rm -rf "/Users/me/WORK/app/cache dir"'), "");
+  assert.notEqual(run('rm -rf "/Users/me/WORK/app/cache dir'), "");
+  assert.notEqual(run("rm -rf /Users/me/WORK/app/cache dir"), "");
   assert.notEqual(run("rm -rf /Users/me/WORK/app/.swift-build/../src"), "");
   assert.notEqual(run("rm -rf /Users/me/WORK/app/.swift-build/*"), "");
   assert.notEqual(run("rm -rf /Users/me/WORK/app/.git/swiftcache"), "");

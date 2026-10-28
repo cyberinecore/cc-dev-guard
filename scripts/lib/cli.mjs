@@ -13,11 +13,11 @@ import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
 import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
 import { isCacheDir, isRepoRoot } from "./cachedir.mjs";
-import { dangerReason, ESCAPE_ENV, isCacheDirTagPath, TAG_WRITE_REASON } from "./dangerguard.mjs";
+import { dangerAskReason, dangerReason, ESCAPE_ENV, isCacheDirTagPath, TAG_WRITE_REASON } from "./dangerguard.mjs";
 import { liveCheck, liveFileReason } from "./liveguard.mjs";
 import { countLaunches, liveStateDir, loadLiveState, RELAUNCH_WINDOW_MS, saveLiveState } from "./livestate.mjs";
 import { mcpWriteTargets } from "./mcpfs.mjs";
-import { GUARDED_FILE_WHYS, render, renderDanger, renderError, renderLive, renderWorktree } from "./output.mjs";
+import { GUARDED_FILE_WHYS, render, renderDanger, renderDangerAsk, renderError, renderLive, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 
@@ -154,12 +154,15 @@ function bashHook(input, env, deps, now) {
   const danger = dangerCheck(command, { env, config, sessionRoot, home, cwd });
   if (danger) return logGuard(env, config, input, "danger", danger, now), danger;
   const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
+  if (live && live.hookSpecificOutput?.permissionDecision === "deny") return logGuard(env, config, input, "live", live, now), live;
+  const git = deps.git || makeGit();
+  const dangerAsk = dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd, git });
+  if (dangerAsk) return logGuard(env, config, input, "danger", dangerAsk, now), dangerAsk;
   if (live) return logGuard(env, config, input, "live", live, now), live;
   const writes = findWrites(command, { cwd, home });
   const worktree = mentionsWorktree(command);
   if (!writes.length && !worktree) return null;
   if (config.mode === "off") return null;
-  const git = deps.git || makeGit();
   if (worktree && config.worktreeGuard) {
     const out = renderWorktree(judgeWorktreeAdds(command, { cwd, home, git }), { mode: config.mode, input, warnings: config.warnings });
     if (out) return out;
@@ -190,6 +193,15 @@ function dangerCheck(command, { env, config, sessionRoot, home, cwd = "" }) {
   if (!config.dangerGuard) return null;
   const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd });
   return dangerOut(reason, { env, config, sessionRoot });
+}
+
+function dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd = "", git }) {
+  if (!config.dangerGuard) return null;
+  const reason = dangerAskReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd, git });
+  if (!reason) return null;
+  const escape = escapeOpen(env, config, sessionRoot);
+  if (escape.open) return null;
+  return renderDangerAsk(reason, { input, escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings] });
 }
 
 function tagWriteCheck(paths, { env, config, sessionRoot }) {
