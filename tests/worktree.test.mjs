@@ -163,7 +163,7 @@ test("the scanner flags prunable, stray and merged worktrees and changes nothing
   git(main, "worktree", "add", "-q", "-b", "stray", join(root, "stray"));
   git(main, "worktree", "add", "-q", "-b", "gone", join(root, "gone"));
   rmSync(join(root, "gone"), { recursive: true, force: true });
-  const gh = { prState: (dir, branch) => (branch === "inside" ? { ok: true, state: "MERGED", number: 7, mergedAt: "2026-10-01T00:00:00Z" } : { ok: true, state: "NONE" }) };
+  const gh = { prState: (dir, branch) => (branch === "inside" ? { ok: true, state: "MERGED", number: 7, mergedAt: "2026-10-01T00:00:00Z", headRefOid: git(main, "rev-parse", "inside").trim() } : { ok: true, state: "NONE" }) };
   const r = scanRepo(main, { git: g, gh });
   const by = Object.fromEntries(r.findings.map((x) => [x.branch, x.issues.join("; ")]));
   assert.match(by.inside, /merged: PR #7/);
@@ -175,6 +175,23 @@ test("the scanner flags prunable, stray and merged worktrees and changes nothing
   assert.match(text, /Nothing was changed/);
   assert.equal(parseWorktreeList(git(main, "worktree", "list", "--porcelain")).length, 4, "no worktree record was removed");
   assert.ok(existsSync(join(root, "stray")));
+});
+
+test("a merged PR whose head differs from the worktree HEAD is unverifiable, not merged", () => {
+  const root = tempDir();
+  const main = repo(join(root, "main"));
+  const wt = join(root, "w");
+  git(main, "worktree", "add", "-q", "-b", "feat", wt);
+  const prHead = git(wt, "rev-parse", "HEAD").trim();
+  writeFileSync(join(wt, "later.txt"), "x");
+  git(wt, "add", "later.txt");
+  git(wt, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "later");
+  const stale = { prState: () => ({ ok: true, state: "MERGED", number: 9, mergedAt: "2026-10-01T00:00:00Z", headRefOid: prHead }) };
+  const issues = scanRepo(main, { git: makeGit(), gh: stale }).findings[0].issues.join("; ");
+  assert.match(issues, /unverifiable: PR #9/);
+  assert.doesNotMatch(issues, /merged: PR/);
+  const same = { prState: () => ({ ok: true, state: "MERGED", number: 9, mergedAt: "", headRefOid: git(wt, "rev-parse", "HEAD").trim() }) };
+  assert.match(scanRepo(main, { git: makeGit(), gh: same }).findings[0].issues.join("; "), /merged: PR #9/);
 });
 
 test("a gh failure is reported once per repository", () => {
