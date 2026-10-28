@@ -20,9 +20,9 @@ export function makeGh() {
   return {
     prState(dir, branch) {
       try {
-        const out = execFileSync("gh", ["pr", "view", branch, "--json", "state,mergedAt,number"], { cwd: dir, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 20000, windowsHide: true });
+        const out = execFileSync("gh", ["pr", "view", branch, "--json", "state,mergedAt,number,headRefOid"], { cwd: dir, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 20000, windowsHide: true });
         const pr = JSON.parse(out);
-        return { ok: true, state: pr.state, mergedAt: pr.mergedAt || "", number: pr.number };
+        return { ok: true, state: pr.state, mergedAt: pr.mergedAt || "", number: pr.number, headRefOid: pr.headRefOid || "" };
       } catch (e) {
         if (e && e.code === "ENOENT") return { ok: false, missing: true };
         const err = String(e?.stderr || "");
@@ -74,15 +74,20 @@ export function scanRepo(root, { git, gh = null }) {
     const real = realPathOr(wt.path);
     if (!isUnder(real, worktreesDir) && !isUnder(wt.path, worktreesDir)) issues.push("outside .claude/worktrees/");
     let merged = "";
+    let unverifiable = "";
     if (wt.branch) {
       if (gh && !ghMissing && !ghError) {
         const pr = gh.prState(root, wt.branch);
         if (pr.missing) ghMissing = true;
         else if (!pr.ok) ghError = pr.reason;
-        else if (pr.state === "MERGED") merged = `merged: PR #${pr.number}${pr.mergedAt ? " at " + pr.mergedAt : ""}`;
+        else if (pr.state === "MERGED") {
+          if (pr.headRefOid && wt.head && pr.headRefOid === wt.head) merged = `merged: PR #${pr.number}${pr.mergedAt ? " at " + pr.mergedAt : ""}`;
+          else unverifiable = `unverifiable: PR #${pr.number} for this branch name merged, but its head is not this worktree's HEAD`;
+        }
       }
       if (!merged && base && wt.head && git.isAncestor(root, wt.head, base)) merged = `merged or empty: no commits beyond ${base}`;
       if (merged) issues.push(merged);
+      else if (unverifiable) issues.push(unverifiable);
     }
     findings.push({ ...wt, issues });
   }
