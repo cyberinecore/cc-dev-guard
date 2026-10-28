@@ -109,6 +109,20 @@ test("git worktree remove passes for the main worktree, an unknown path and a pr
   assert.match(ask("git --git-dir=/x/.git worktree remove wt-3", opts()), /--git-dir/);
 });
 
+test("Windows paths: a backslash cwd with a drive letter matches the forward-slash paths git prints", () => {
+  const winRepo = "C:\\Users\\me\\WORK\\repo";
+  const wt = "C:/Users/me/WORK/repo/.claude/worktrees/wt-1";
+  const worktrees = [{ path: "C:/Users/me/WORK/repo" }, { path: wt }];
+  const g = stubGit({ worktrees, ignored: { [wt]: [".env"] } });
+  const win = { home: "C:\\Users\\me", cwd: winRepo, root: winRepo, git: g };
+  assert.match(dangerAskReason("git worktree remove .claude/worktrees/wt-1", win), /`\.env`/);
+  assert.deepEqual(g.calls[0], ["worktrees", "C:/Users/me/WORK/repo"]);
+  assert.match(dangerAskReason("git worktree remove C:/Users/me/WORK/repo/.claude/worktrees/wt-1", win), /`\.env`/);
+  assert.match(dangerAskReason("cd .claude/worktrees && rm -rf wt-1", win), /ExitWorktree/);
+  assert.match(dangerAskReason('rm -rf "C:\\Users\\me\\WORK\\repo\\.claude\\worktrees\\wt-1"', win), /ExitWorktree/);
+  assert.equal(dangerAskReason("rm -rf src", { ...win, cwd: `${winRepo}\\.claude\\worktrees\\wt-1` }), "");
+});
+
 test("git branch -D asks when the branch has commits on no remote; a protected branch stays denied", () => {
   const g = stubGit({ counts: { "refs/heads/feature/x": 3 } });
   assert.match(ask("git branch -D feature/x", opts(g)), /`git branch -D feature\/x` deletes 3 commits that no remote has\. Push the branch first/);

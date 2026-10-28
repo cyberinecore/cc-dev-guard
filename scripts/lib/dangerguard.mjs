@@ -1,4 +1,3 @@
-import { isAbsolute, resolve } from "node:path";
 import { realPathOr } from "./paths.mjs";
 
 export const DEFAULT_PROTECTED_BRANCHES = ["main", "master", "production", "prod", "development", "develop", "dev", "release", "staging"];
@@ -139,7 +138,7 @@ export function shellWords(text, { lenient = false } = {}) {
         let j = i + 1;
         let closed = false;
         while (j < n) {
-          if (text[j] === "\\" && j + 1 < n) {
+          if (text[j] === "\\" && j + 1 < n && '$`"\\\n'.includes(text[j + 1])) {
             value += text[j + 1];
             j += 2;
             continue;
@@ -455,9 +454,24 @@ function subcommandAsk(scan, opts, sub) {
   return gitAsk(sub, opts) || rmWorktreeAsk(scan, opts);
 }
 
+const slashed = (p) => String(p || "").replace(/\\/g, "/");
+const isAbsPath = (p) => /^(?:\/|[A-Za-z]:\/)/.test(slashed(p));
+
+function resolvePath(base, p) {
+  const s = slashed(p);
+  if (/^[A-Za-z]:\//.test(s)) return joinPosix(s.slice(0, 2), s.slice(3));
+  if (s.startsWith("/")) return joinPosix("/", s);
+  return joinPosix(slashed(base), s);
+}
+
+function pathKey(p) {
+  const s = slashed(realPathOr(p)).replace(/\/+$/, "").replace(/^[a-z]:/, (d) => d.toUpperCase());
+  return process.platform === "win32" ? s.toLowerCase() : s;
+}
+
 function segmentCwds(segments, cwd, home) {
   const out = [];
-  let cur = cwd;
+  let cur = isAbsPath(cwd) ? resolvePath("/", cwd) : "";
   for (const { text } of segments) {
     out.push(cur);
     const { words, ok } = shellWords(text);
@@ -465,8 +479,8 @@ function segmentCwds(segments, cwd, home) {
     if (bin !== "cd" && bin !== "pushd" && bin !== "popd") continue;
     const arg = words.slice(1).find((w) => !w.value.startsWith("-") || w.value === "-")?.value;
     const target = arg === undefined ? home || "" : /^~(?:\/|$)/.test(arg) ? (home ? home + arg.slice(1) : "") : arg;
-    if (!ok || bin === "popd" || !target || target === "-" || /[$`*?]/.test(target) || (!isAbsolute(target) && !isAbsolute(cur || ""))) cur = "";
-    else cur = resolve(cur || "/", target);
+    if (!ok || bin === "popd" || !target || target === "-" || /[$`*?]/.test(target) || (!isAbsPath(target) && !cur)) cur = "";
+    else cur = resolvePath(cur, target);
   }
   return out;
 }
@@ -506,11 +520,11 @@ function gitAsk(sub, opts) {
 }
 
 function gitBase(g, { cwd, home }) {
-  let dir = cwd;
-  if (!isAbsolute(dir || "")) return "";
+  if (!isAbsPath(cwd)) return "";
+  let dir = resolvePath("/", cwd);
   for (const d of g.dirs) {
     if (!d || /[$`]/.test(d)) return "";
-    dir = resolve(dir, /^~(?:\/|$)/.test(d) && home ? home + d.slice(1) : d);
+    dir = resolvePath(dir, /^~(?:\/|$)/.test(d) && home ? home + d.slice(1) : d);
   }
   return dir;
 }
@@ -543,11 +557,11 @@ function worktreeLoss(p, g, { git, home, cwd }) {
   if (!git) return probeFailed(what, "git is not available to the guard");
   const list = git.worktrees(base);
   if (!list) return probeFailed(what, "`git worktree list` failed");
-  const want = realPathOr(/^~(?:\/|$)/.test(p) && home ? home + p.slice(1) : resolve(base, p));
-  let entry = list.find((e) => realPathOr(e.path) === want);
-  if (!entry && !isAbsolute(p)) {
-    const tail = "/" + p.replace(/\/+$/, "");
-    const named = list.filter((e) => e.path.endsWith(tail));
+  const want = pathKey(resolvePath(base, /^~(?:\/|$)/.test(p) && home ? home + p.slice(1) : p));
+  let entry = list.find((e) => pathKey(e.path) === want);
+  if (!entry && !isAbsPath(p)) {
+    const tail = "/" + slashed(p).replace(/\/+$/, "");
+    const named = list.filter((e) => slashed(e.path).endsWith(tail));
     if (named.length === 1) entry = named[0];
   }
   if (!entry || entry === list[0] || entry.bare || entry.prunable !== null) return "";
@@ -593,8 +607,9 @@ function rmWorktreeAsk(scan, opts) {
     for (const w of call.targets) {
       const target = rmTarget(w.raw, w.value, opts.vars);
       if (target.climbs) continue;
-      const abs = /^[/~$]/.test(target.path) || !isAbsolute(opts.cwd || "") ? "" : joinPosix(opts.cwd, target.path);
-      if (reWorktreeRoot.test(target.path) || reWorktreeRoot.test(abs)) return `recursive rm of \`${target.shown}\` deletes a git worktree under .claude/worktrees/ with any uncommitted work, ignored files and commits no branch holds, and leaves a stale worktree record behind. ${WORKTREE_ROUTES}`;
+      const path = slashed(target.path);
+      const abs = /^[/~$]/.test(path) || isAbsPath(path) || !isAbsPath(opts.cwd) ? "" : resolvePath(opts.cwd, path);
+      if (reWorktreeRoot.test(path) || reWorktreeRoot.test(abs)) return `recursive rm of \`${target.shown}\` deletes a git worktree under .claude/worktrees/ with any uncommitted work, ignored files and commits no branch holds, and leaves a stale worktree record behind. ${WORKTREE_ROUTES}`;
     }
   }
   return "";
