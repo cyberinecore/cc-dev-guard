@@ -122,9 +122,17 @@ test("projectSlug replaces every character that is not a letter or a digit", () 
   assert.equal(projectSlug("/Users/a/.claude/wt_1 x"), "-Users-a--claude-wt-1-x");
   assert.equal(projectSlug("/private/var/folders/_2/5v_c"), "-private-var-folders--2-5v-c");
   assert.equal(projectSlug(""), "");
+});
+
+test("a slug over 200 characters never matches", { skip: process.platform === "win32" }, () => {
   const f = scopeFixture();
   const env = isolatedEnv();
-  const long = join(f.root, "a".repeat(40), "b".repeat(40), "c".repeat(40), "d".repeat(40));
+  let long = f.root;
+  while (projectSlug(long).length <= 210) long = join(long, "a".repeat(30));
+  assert.ok(projectSlug(long).length > 200 && projectSlug(long).length < 250);
   mkdirSync(long, { recursive: true });
-  assert.equal(readRelocatedDir(projectTranscript(env, [relocated(long)], long), "s1"), "", "a slug over 200 characters never matches");
+  assert.equal(readRelocatedDir(projectTranscript(env, [relocated(long)], long), "s1"), "");
+  const short = join(f.root, "short");
+  mkdirSync(short);
+  assert.equal(readRelocatedDir(projectTranscript(env, [relocated(short)], short), "s1"), short);
 });
