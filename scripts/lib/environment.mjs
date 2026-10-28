@@ -1,5 +1,5 @@
 import { OPTION_KEYS } from "./config.mjs";
-import { OPTION_PREFIX } from "./constants.mjs";
+import { NO_RM_PROMPT_ENV, OPTION_PREFIX } from "./constants.mjs";
 import { ESCAPE_ENV } from "./dangerguard.mjs";
 
 export const NAMED_ENV_KEYS = [
@@ -13,6 +13,7 @@ export const NAMED_ENV_KEYS = [
   "CLAUDE_JOB_DIR",
   "CLAUDE_COWORK_MEMORY_PATH_OVERRIDE",
   ESCAPE_ENV,
+  NO_RM_PROMPT_ENV,
   ...OPTION_KEYS.map((k) => OPTION_PREFIX + k.toUpperCase()),
 ];
 
