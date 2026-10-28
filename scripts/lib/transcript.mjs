@@ -1,5 +1,5 @@
 import { closeSync, fstatSync, openSync, readSync, statSync } from "node:fs";
-import { dirname, isAbsolute } from "node:path";
+import { basename, dirname, isAbsolute } from "node:path";
 import { resolveDir } from "./paths.mjs";
 
 const MARKER = Buffer.from('"type":"environment"');
@@ -62,6 +62,22 @@ function parseLine(line) {
   }
 }
 
+const SLUG_MAX = 200;
+
+// DECISION: the project folder slug maps every non-alphanumeric character to "-", not only "/" and ".", because Claude Code folders measured under projects/ replace "_" and spaces the same way (a "/_2/" path became "--2"); a slug over 200 characters never matches, because Claude Code's truncation of long names was not measured and a false ask is the safe side.
+
+export function projectSlug(dir) {
+  return typeof dir === "string" ? dir.replace(/[^A-Za-z0-9]/g, "-") : "";
+}
+
+function slugMatches(folder, ...dirs) {
+  const want = projectSlug(folder);
+  return dirs.some((d) => {
+    const slug = projectSlug(d);
+    return slug !== "" && slug.length <= SLUG_MAX && slug === want;
+  });
+}
+
 export function readRelocatedDir(transcriptPath, sessionId, options = {}) {
   if (typeof sessionId !== "string" || sessionId === "") return "";
   const found = scanTranscript(transcriptPath, options, RELOCATED_MARKER, (line) => {
@@ -71,6 +87,7 @@ export function readRelocatedDir(transcriptPath, sessionId, options = {}) {
     const dir = record.relocatedCwd;
     const resolved = typeof dir === "string" && isAbsolute(dir) ? resolveDir(dir) : "";
     if (!resolved || dirname(resolved) === resolved || !isDirectory(resolved)) return unavailable("the last /cd record names no usable directory");
+    if (!slugMatches(basename(dirname(transcriptPath)), dir, resolved)) return unavailable("the last /cd record names a directory other than the transcript's project folder");
     return { ok: true, dir: resolved };
   });
   return found.ok ? found.dir : "";

@@ -112,3 +112,17 @@ No hook tells a plugin that the user moved the session, so with default settings
 | the same `/cd` without `read_transcript` (0.6.x run above) | held |
 
 Confirmed with this plugin the same day in an interactive tmux session (`--plugin-dir .`, `--setting-sources project,local`, `--dangerously-skip-permissions`, session in `a`): after `/cd` into a fresh repository `c`, a Write to `c/z.txt` was held with "Default: NO. ... is outside this session's repository `a`", and nothing was written. Claude Code 2.1.289 prints a PreToolUse deny in the transcript as `PreToolUse:Write hook error: <reason>`. In the default permission mode the interactive dialog for a cross-repository Write showed Claude Code's own "Do you want to create x.txt?" choices with no devguard reason on screen; Claude Code also asks there on its own for a path outside the working directory, so that run does not separate devguard's ask from Claude Code's.
+
+## `CLAUDE_CODE_EVEN_MORE_DANGEROUSLY_SKIP_PERMISSIONS` rows
+
+2.1.312 (Claude Code), model haiku, 2026-10-28, headless `claude -p`, `--setting-sources project`, `--dangerously-skip-permissions`, `--plugin-dir` on this branch. Each row asks for exactly one command, `rm -rf <fx>/data`, where `<fx>` is a fresh directory inside a throwaway `mktemp -d "$HOME/.dgprobe.XXXXXX"` directory (a path under `/tmp` or the macOS temp folder is allowed by `danger_guard` as scratch space, so the probe sits in the home directory to be a non-regenerable absolute path). `data` holds one file; nothing outside the throwaway directory was a target.
+
+| row | setup | `data/keep.txt` survived | observed |
+|---|---|---|---|
+| no-plugin control | variable set, no plugin | no | the command ran |
+| danger-guard-var-set | variable set, plugin | yes | `recursive rm of absolute path ... is denied`; the deny reached the model |
+| danger-guard-var-unset | variable unset (`env -u`), plugin | yes | the same denial |
+| SessionStart notice, variable set | variable set in the `claude` environment, plugin | - | not shown: the SessionStart `additionalContext` was the usual 1021 characters with no notice |
+| variable visible to a hook | a command hook run by `claude -p` with the variable set in its environment | - | `unset` in the hook environment, while the hook still gets `CLAUDE_PID`; `ps eww -p $CLAUDE_PID` shows the variable in the Claude Code process environment |
+
+So `danger_guard` denies the recursive rm with the variable set, the same as without it. Claude Code 2.1.312 does not hand this variable to hook processes, so the notice appears only when the variable reaches the hook some other way; the README Limits line says so. Reading the variable from the Claude Code process environment through `CLAUDE_PID` would work (the probe above), but it exposes the whole environment to the hook process and is not done.
