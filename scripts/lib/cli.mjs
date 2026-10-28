@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { configDirOf } from "./allowances.mjs";
 import { loadConfig, repoSetsEnv } from "./config.mjs";
-import { FALLBACK_MARKER_DIR, NAME, VERSION } from "./constants.mjs";
+import { FALLBACK_MARKER_DIR, NAME, NO_RM_PROMPT_ENV, VERSION } from "./constants.mjs";
 
 const pluginName = NAME;
 const version = VERSION;
@@ -92,13 +92,15 @@ export const SESSION_HINT = [
   "- Text handed to an interpreter or database client (a shell, a remote shell, an SQL client, an inline script) is scanned like a command, so a statement that drops or empties a table, or a recursive delete, inside that text is denied. Write such text to a file with a plain cat heredoc first; that body is not scanned.",
 ].join("\n");
 
+export const NO_RM_PROMPT_NOTICE = `${NO_RM_PROMPT_ENV} is set, so Claude Code's own prompt before a dangerous rm is off in this session and ${pluginName} danger_guard is the only layer between a recursive rm and the files. Never run rm -rf on a path you were not asked to delete.`;
+
 export const LIVE_HINT = `${pluginName} also guards the user's running machine: stop a process by the PID this session started, never by name, pattern or port, and leave the user's tmux sessions, system settings and launch agents alone; such commands are asked about or denied.`;
 
-export function sessionStart(nodeVersion, config = null) {
+export function sessionStart(nodeVersion, config = null, env = {}) {
   const major = Number(String(nodeVersion).split(".")[0]);
   if (major < 18) return { systemMessage: `${pluginName}: node ${nodeVersion} is older than 18, so the ${pluginName} write guard may not run in this session. Install Node.js 18 or later and restart Claude Code.` };
   if (!config || !config.sessionHint) return null;
-  const parts = [config.dangerGuard ? SESSION_HINT : "", config.liveGuard ? LIVE_HINT : ""].filter(Boolean);
+  const parts = [config.dangerGuard ? SESSION_HINT : "", config.dangerGuard && env[NO_RM_PROMPT_ENV] ? NO_RM_PROMPT_NOTICE : "", config.liveGuard ? LIVE_HINT : ""].filter(Boolean);
   if (!parts.length) return null;
   return { hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: parts.join("\n") } };
 }
@@ -391,7 +393,7 @@ export async function main(argv, { env = namedEnv(process.env), stdout = process
       try {
         config = loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, process.cwd()) });
       } catch {}
-      const out = sessionStart(process.versions.node, config);
+      const out = sessionStart(process.versions.node, config, env);
       if (out) stdout.write(JSON.stringify(out) + "\n");
       return 0;
     }

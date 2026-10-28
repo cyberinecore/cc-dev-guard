@@ -48,6 +48,24 @@ test("session-start hands over the danger hint on node 18+, is silent with the h
   assert.equal(sessionStart("22.1.0", { dangerGuard: false, sessionHint: true }), null);
 });
 
+test("session-start says the dangerous-rm prompt is off only when the variable is set and danger_guard is on", () => {
+  const on = { dangerGuard: true, sessionHint: true };
+  const name = "CLAUDE_CODE_EVEN_MORE_DANGEROUSLY_SKIP_PERMISSIONS";
+  const text = (cfg, env) => sessionStart("22.1.0", cfg, env)?.hookSpecificOutput.additionalContext || "";
+  assert.doesNotMatch(text(on, {}), new RegExp(name));
+  assert.doesNotMatch(text(on, { [name]: "" }), new RegExp(name));
+  assert.match(text(on, { [name]: "1" }), new RegExp(`${name} is set, so Claude Code's own prompt before a dangerous rm is off`));
+  assert.match(text(on, { [name]: "1" }), /^cyberine-devguard denies data-destroying/);
+  assert.equal(sessionStart("22.1.0", { dangerGuard: false, sessionHint: true }, { [name]: "1" }), null);
+  assert.equal(sessionStart("22.1.0", { dangerGuard: true, sessionHint: false }, { [name]: "1" }), null);
+  const r = spawnSync(process.execPath, [entry, "session-start"], { encoding: "utf8", env: { ...process.env, [name]: "1" } });
+  assert.match(JSON.parse(r.stdout).hookSpecificOutput.additionalContext, new RegExp(name));
+  const unset = { ...process.env };
+  delete unset[name];
+  const u = spawnSync(process.execPath, [entry, "session-start"], { encoding: "utf8", env: unset });
+  assert.doesNotMatch(JSON.parse(u.stdout).hookSpecificOutput.additionalContext, new RegExp(name));
+});
+
 test("the hook stays well inside its configured timeout", () => {
   const f = scopeFixture();
   const timeoutMs = JSON.parse(readFileSync(join(root, "hooks", "hooks.json"), "utf8")).hooks.PreToolUse[0].hooks[0].timeout * 1000;
