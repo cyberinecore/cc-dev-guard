@@ -143,6 +143,11 @@ export function renderDanger(reason, { escapeName, warnings = [] } = {}) {
   return decision("deny", withWarnings(dangerDenyReason(reason, escapeName), warnings));
 }
 
+export function renderDangerAsk(reason, { input, escapeName, warnings = [] } = {}) {
+  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${pluginName}: ${reason} This session runs with bypassPermissions, where no prompt reaches the user, so danger_guard denies it. Take the safer route named above, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
+  return decision("ask", withWarnings(`${pluginName}: ${reason}`, warnings));
+}
+
 export function renderError(error, input) {
   const msg = error && error.message ? error.message : String(error);
   return askOrDeny(input, `${pluginName} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);

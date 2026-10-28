@@ -42,6 +42,8 @@ Every difference is devguard being stricter. Someone migrating from the Go hook 
 
 94 of 94 cases agree: 50 denied by both, 44 passed by both, none differing from the Go table.
 
+Since 0.12.0 (D47) one Go allow case differs on purpose: `rm -rf ~/WORK/repo/.claude/worktrees/wt-1` is asked about, and the parity run, which uses bypassPermissions, sees that ask as a deny, so a rerun is expected to show 93 of 94. The run was not repeated for 0.12.0 (no `nf-hooks` binary on the build machine); `tests/dangerask.test.mjs` asserts that this is the only Go or devguard allow case that now asks.
+
 Intended divergences since D37 (task km5zk), covered by `DEVGUARD_ALLOWS` and `DEVGUARD_DENIES` in the same fixture file and not part of the parity run, which compares the Go table only:
 
 | command shape | Go guard | devguard | why |
@@ -60,5 +62,13 @@ Intended divergences since D37 (task km5zk), covered by `DEVGUARD_ALLOWS` and `D
 | recursive `rm` of a regenerable name directly in `$HOME`, inside `.git`, or at a repository root (D45, task kqgce) | passes | denies | the name alone does not make those folders regenerable |
 | destructive text inside a quoted argument of `glab`, `linear` or `cyberine` (D45) | denies when the text names a dangerous command | passes | prose, like `git`, `gh`, `jira` and `curl` arguments |
 | shapes the Go guard never checked (D40, `HARDEN_DENIES` in `tests/dangerguard.test.mjs`): `/bin/rm`, `\rm`, `find ... -delete`, `find ... -exec rm -r`, `xargs rm -r`, `rm -rf .git`, `dropdb`, `mysqladmin drop`, `redis-cli FLUSHALL`, mongo shell drops, ORM resets, managed-database deletes, `docker rm -v`, `kubectl delete statefulset`, `DELETE FROM` without `WHERE`, `dd of=/dev/<device>`, `mkfs`, `wipefs`, `git branch -D <protected>`, `git stash clear` | passes | denies | data-destroying, and under bypassPermissions nothing else asks |
+| a quoted recursive `rm` target with a space (`rm -rf "/Users/x/dist precious"`) (D47) | denies or passes by the first word (`/Users/x/dist` is a regenerable name) | judged as one path | the shell passes it as one argument |
+| a recursive `rm` with an unterminated quote (D47) | judges the words | denies | the targets cannot be known |
+| a relative target that resolves to `.` or above (`./src/..`, `a/../..`, `./*`) (D47) | passes | denies | it removes the working directory or its parent |
+| an absolute target with a `..` segment (`/repo/src/../node_modules`) (D47) | passes when the last name is regenerable | denies | `..` through a symlink is physical; the text cannot say where it lands |
+| `VAR=<literal> && rm -rf $VAR` in one command, the literal at most prefixed by `$HOME` or `~` (D47) | denies (variable) | judges the resolved path | the value is in the command; a reassignment, substitution, pipe, `\|\|`, `&` or subshell keeps the deny |
+| `TMPDIR=/ && rm -rf $TMPDIR/x` (D47) | passes (`$TMPDIR` prefix) | denies | the command set the variable itself |
+| `git worktree remove --force`/`-f`, recursive `rm` of a `.claude/worktrees/<name>` folder (D47) | passes | asks (deny under bypassPermissions) | uncommitted work in the worktree is lost |
+| plain `git worktree remove <path>` with ignored files (other than build and cache folders) or commits only its detached HEAD holds; `git branch -D <b>` with commits on no remote (D47) | passes | asks (deny under bypassPermissions) | git deletes them without a word; probed through `git.mjs`, a failed probe asks |
 
 The deny reasons differ on purpose: devguard drops the personal pointers (`settings.json deny list`, the 2026-03-24 incident, `~/.claude/rules/safety.md`) and names `CY_ALLOW_DANGER` or the `allow_danger_env` variable as the escape.

@@ -1,3 +1,6 @@
+import { isAbsolute, resolve } from "node:path";
+import { realPathOr } from "./paths.mjs";
+
 export const DEFAULT_PROTECTED_BRANCHES = ["main", "master", "production", "prod", "development", "develop", "dev", "release", "staging"];
 export const ESCAPE_ENV = "CY_ALLOW_DANGER";
 
@@ -71,9 +74,14 @@ const baseName = (p) => {
 const isAssignment = (t) => t.includes("=") && !t.startsWith("=");
 
 export function splitSubcommands(cmd) {
+  return splitSegments(cmd).map((p) => p.text);
+}
+
+export function splitSegments(cmd) {
   const parts = [];
   let cur = "";
   let q = "";
+  let op = "";
   for (let i = 0; i < cmd.length; i++) {
     const c = cmd[i];
     if (q) {
@@ -91,14 +99,173 @@ export function splitSubcommands(cmd) {
       continue;
     }
     if (c === "|" || c === "&" || c === ";" || c === "\n") {
-      if (cur.trim() !== "") parts.push(cur);
+      if (cur.trim() !== "") {
+        parts.push({ text: cur, op });
+        op = "";
+      }
+      op += c;
       cur = "";
       continue;
     }
     cur += c;
   }
-  if (cur.trim() !== "") parts.push(cur);
+  if (cur.trim() !== "") parts.push({ text: cur, op });
   return parts;
+}
+
+export function shellWords(text, { lenient = false } = {}) {
+  const words = [];
+  let i = 0;
+  const n = text.length;
+  const fail = () => ({ words, ok: false });
+  while (i < n) {
+    while (i < n && /\s/.test(text[i])) i++;
+    if (i >= n) break;
+    const start = i;
+    let value = "";
+    while (i < n && !/\s/.test(text[i])) {
+      const c = text[i];
+      if (c === "'") {
+        const end = text.indexOf("'", i + 1);
+        if (end < 0) {
+          if (!lenient) return fail();
+          value += text.slice(i + 1);
+          i = n;
+          break;
+        }
+        value += text.slice(i + 1, end);
+        i = end + 1;
+      } else if (c === '"') {
+        let j = i + 1;
+        let closed = false;
+        while (j < n) {
+          if (text[j] === "\\" && j + 1 < n) {
+            value += text[j + 1];
+            j += 2;
+            continue;
+          }
+          if (text[j] === '"') {
+            closed = true;
+            break;
+          }
+          value += text[j++];
+        }
+        if (!closed && !lenient) return fail();
+        i = closed ? j + 1 : n;
+      } else if (c === "\\") {
+        if (i + 1 < n) value += text[i + 1];
+        i += 2;
+      } else if (c === "$" && text[i + 1] === "(") {
+        let depth = 0;
+        let j = i + 1;
+        for (; j < n; j++) {
+          if (text[j] === "(") depth++;
+          else if (text[j] === ")" && --depth === 0) break;
+        }
+        if (j >= n && !lenient) return fail();
+        value += text.slice(i, j + 1);
+        i = j + 1;
+      } else if (c === "`") {
+        const end = text.indexOf("`", i + 1);
+        if (end < 0 && !lenient) return fail();
+        value += text.slice(i, end < 0 ? n : end + 1);
+        i = end < 0 ? n : end + 1;
+      } else {
+        value += c;
+        i++;
+      }
+    }
+    words.push({ raw: text.slice(start, i), value });
+  }
+  return { words, ok: true };
+}
+
+const reAssignWord = /^([A-Za-z_]\w*)=/;
+
+function opKind(op) {
+  const s = op.replace(/\n/g, ";");
+  if (/^;*$/.test(s)) return "seq";
+  if (/^&&;*$/.test(s)) return "and";
+  return "other";
+}
+
+function literalValue(raw, value, home) {
+  if (/`|\$\(/.test(raw)) return null;
+  let v = value;
+  const homeRef = /^\$(?:HOME(?!\w)|\{HOME\})/.exec(v);
+  if (homeRef && /^"?\$/.test(raw)) {
+    if (!home) return null;
+    v = home + v.slice(homeRef[0].length);
+  } else if (/^~(?:\/|$)/.test(raw)) {
+    if (!home) return null;
+    v = home + v.slice(1);
+  }
+  return v.includes("$") ? null : v;
+}
+
+function literalAssignments(text, home) {
+  const { words, ok } = shellWords(text);
+  if (!ok || !words.length) return null;
+  const list = words[0].value === "export" && words[0].raw === "export" ? words.slice(1) : words;
+  if (!list.length || !list.every((w) => reAssignWord.test(w.raw))) return null;
+  return list.map((w) => {
+    const name = reAssignWord.exec(w.raw)[1];
+    return [name, literalValue(w.raw.slice(name.length + 1), w.value.slice(name.length + 1), home)];
+  });
+}
+
+function mentionsName(text, name) {
+  return new RegExp(String.raw`(?:^|[^\w\${])${name}(?!\w)`).test(text);
+}
+
+export function assignedVars(segments, home) {
+  const env = new Map();
+  const out = [];
+  for (const { text, op } of segments) {
+    const kind = opKind(op);
+    for (const v of env.values()) if (kind === "other" || (kind === "seq" && v.cond)) v.value = null;
+    out.push(new Map([...env].map(([k, v]) => [k, v.value])));
+    const assigned = literalAssignments(text, home);
+    if (assigned) {
+      for (const [name, value] of assigned) env.set(name, { value: env.has(name) || kind === "other" ? null : value, cond: kind === "and" });
+    } else {
+      for (const [name, v] of env) if (mentionsName(text, name)) v.value = null;
+    }
+  }
+  return out;
+}
+
+function resolveVar(value, vars) {
+  const m = /^\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))(?=\/|$)/.exec(value);
+  if (!m || !vars) return value;
+  const v = vars.get(m[1] || m[2]);
+  return typeof v === "string" ? v + value.slice(m[0].length) : value;
+}
+
+export function normalizeTarget(t) {
+  let root = "";
+  let rest = t;
+  if (t.startsWith("/")) {
+    root = "/";
+    rest = t.slice(1);
+  } else if (/^[~$]/.test(t)) {
+    const i = t.indexOf("/");
+    root = i < 0 ? t : t.slice(0, i);
+    rest = i < 0 ? "" : t.slice(i + 1);
+  }
+  const out = [];
+  for (const seg of rest.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg !== "..") {
+      out.push(seg);
+      continue;
+    }
+    if (out.length) out.pop();
+    else if (root !== "/") return { path: t, climbs: true };
+  }
+  if (root === "/") return { path: "/" + out.join("/"), climbs: false };
+  if (root) return { path: out.length ? `${root}/${out.join("/")}` : root, climbs: false };
+  return { path: out.join("/") || ".", climbs: false };
 }
 
 export function isTextOnly(sub) {
@@ -274,6 +441,165 @@ export function dangerReason(command, { home = "", configDir = "", protectedBran
   return tagWriteShapeReason(command) || guardDepth(command, 0, opts);
 }
 
+export function dangerAskReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, isCacheDir = null, isRepoRoot = null, root = "", cwd = "", git = null } = {}) {
+  if (typeof command !== "string" || command === "") return "";
+  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), isCacheDir, isRepoRoot, root, cwd, git };
+  return guardDepth(command, 0, opts, subcommandAsk);
+}
+
+const WORKTREE_ROUTES = "Leave a session's own worktree with ExitWorktree, remove a background session's worktree with `claude rm <id>`, or run plain `git worktree remove <path>` without --force, which refuses a worktree that holds uncommitted work.";
+const GIT_PREFIX_BINS = new Set(["sudo", "env", "command", "nohup", "time", "exec"]);
+const reWorktreeRoot = /(^|\/)\.claude\/worktrees(\/[^/]+)?\/?$/;
+
+function subcommandAsk(scan, opts, sub) {
+  return gitAsk(sub, opts) || rmWorktreeAsk(scan, opts);
+}
+
+function segmentCwds(segments, cwd, home) {
+  const out = [];
+  let cur = cwd;
+  for (const { text } of segments) {
+    out.push(cur);
+    const { words, ok } = shellWords(text);
+    const bin = (words[0]?.value || "").replace(/^[({]+/, "");
+    if (bin !== "cd" && bin !== "pushd" && bin !== "popd") continue;
+    const arg = words.slice(1).find((w) => !w.value.startsWith("-") || w.value === "-")?.value;
+    const target = arg === undefined ? home || "" : /^~(?:\/|$)/.test(arg) ? (home ? home + arg.slice(1) : "") : arg;
+    if (!ok || bin === "popd" || !target || target === "-" || /[$`*?]/.test(target) || (!isAbsolute(target) && !isAbsolute(cur || ""))) cur = "";
+    else cur = resolve(cur || "/", target);
+  }
+  return out;
+}
+
+function gitInvocation(sub) {
+  const { words, ok } = shellWords(sub);
+  if (!ok) return { unparsed: true };
+  let i = 0;
+  while (i < words.length && (reAssignWord.test(words[i].raw) || GIT_PREFIX_BINS.has(words[i].value))) i++;
+  if (!words[i] || baseName(words[i].value) !== "git") return null;
+  const g = { dirs: [], gitDir: false, sub: "", args: [] };
+  for (i++; i < words.length; i++) {
+    const v = words[i].value;
+    if (v === "-C") g.dirs.push(words[++i]?.value ?? "");
+    else if (v === "-c" || v === "--namespace") i++;
+    else if (v === "--git-dir" || v === "--work-tree") {
+      g.gitDir = true;
+      i++;
+    } else if (/^--(?:git-dir|work-tree)=/.test(v)) g.gitDir = true;
+    else if (!v.startsWith("-")) break;
+  }
+  g.sub = words[i]?.value ?? "";
+  g.args = words.slice(i + 1).map((w) => w.value);
+  return g;
+}
+
+function gitAsk(sub, opts) {
+  const g = gitInvocation(sub);
+  if (!g) return "";
+  if (g.unparsed) {
+    if (/\bgit\b/.test(sub) && /\bworktree\s+remove\b|\bbranch\s+(?:\S+\s+)*?-[a-zA-Z]*[dD]/.test(sub)) return "this `git worktree remove` or `git branch` delete could not be parsed (unbalanced quoting), so the guard cannot tell what it deletes. Approve only if you expected it.";
+    return "";
+  }
+  if (g.sub === "worktree" && g.args[0] === "remove") return worktreeRemoveAsk(g, opts);
+  if (g.sub === "branch") return branchDeleteAsk(g, opts);
+  return "";
+}
+
+function gitBase(g, { cwd, home }) {
+  let dir = cwd;
+  if (!isAbsolute(dir || "")) return "";
+  for (const d of g.dirs) {
+    if (!d || /[$`]/.test(d)) return "";
+    dir = resolve(dir, /^~(?:\/|$)/.test(d) && home ? home + d.slice(1) : d);
+  }
+  return dir;
+}
+
+const probeFailed = (what, why) => `${what}: the guard could not check what it would delete (${why}), so it cannot tell whether work would be lost. Approve only if you expected it.`;
+
+function listed(items, max = 5) {
+  const shown = items.slice(0, max).map((x) => `\`${x}\``).join(", ");
+  return items.length > max ? `${shown} and ${items.length - max} more` : shown;
+}
+
+function worktreeRemoveAsk(g, opts) {
+  const rest = g.args.slice(1);
+  const paths = rest.filter((a) => !a.startsWith("-"));
+  if (rest.some((a) => a === "--force" || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a))) return `\`git worktree remove --force ${paths.join(" ")}\` deletes the worktree even when it holds uncommitted changes or untracked files, which are then lost. ${WORKTREE_ROUTES}`;
+  if (opts.nested) return "";
+  for (const p of paths) {
+    const r = worktreeLoss(p, g, opts);
+    if (r) return r;
+  }
+  return "";
+}
+
+function worktreeLoss(p, g, { git, home, cwd }) {
+  const what = `\`git worktree remove ${p}\``;
+  if (g.gitDir) return probeFailed(what, "it names --git-dir or --work-tree");
+  const base = gitBase(g, { cwd, home });
+  if (!base) return probeFailed(what, "the directory git runs in cannot be resolved");
+  if (/[$`*?]/.test(p)) return probeFailed(what, "the path is built from a variable, substitution or glob");
+  if (!git) return probeFailed(what, "git is not available to the guard");
+  const list = git.worktrees(base);
+  if (!list) return probeFailed(what, "`git worktree list` failed");
+  const want = realPathOr(/^~(?:\/|$)/.test(p) && home ? home + p.slice(1) : resolve(base, p));
+  let entry = list.find((e) => realPathOr(e.path) === want);
+  if (!entry && !isAbsolute(p)) {
+    const tail = "/" + p.replace(/\/+$/, "");
+    const named = list.filter((e) => e.path.endsWith(tail));
+    if (named.length === 1) entry = named[0];
+  }
+  if (!entry || entry === list[0] || entry.bare || entry.prunable !== null) return "";
+  const lost = [];
+  const ignored = git.ignoredPaths(entry.path);
+  if (!ignored) return probeFailed(what, "`git ls-files --ignored` failed");
+  const kept = ignored.filter((x) => !x.split("/").some((seg) => REGENERABLE_DIRS.has(seg)));
+  if (kept.length) lost.push(`ignored files that no commit holds (${listed(kept)})`);
+  if (entry.detached && entry.head) {
+    const n = git.countRevs(base, [entry.head, "--not", "--branches", "--tags", "--remotes"]);
+    if (n === null) return probeFailed(what, "`git rev-list` failed");
+    if (n > 0) lost.push(`${n} commit${n === 1 ? "" : "s"} reachable only from its detached HEAD \`${entry.head.slice(0, 12)}\``);
+  }
+  if (!lost.length) return "";
+  return `${what} deletes ${lost.join(" and ")}. Keep them first (copy the files out; \`git -C ${entry.path} branch <name>\` keeps the commits), or approve only if they may go.`;
+}
+
+function branchDeleteAsk(g, opts) {
+  const args = g.args.join(" ");
+  if (!reBranchDeleteD.test(args) && !(reBranchDelete.test(args) && reForceFlag.test(args))) return "";
+  if (opts.nested) return "";
+  const names = g.args.filter((a) => !a.startsWith("-") && !opts.protectedBranches.has(a));
+  for (const b of names) {
+    const what = `\`git branch -D ${b}\``;
+    if (g.gitDir) return probeFailed(what, "it names --git-dir or --work-tree");
+    const base = gitBase(g, opts);
+    if (!base) return probeFailed(what, "the directory git runs in cannot be resolved");
+    if (!/^[\w][\w./@+-]*$/.test(b)) return probeFailed(what, "the branch name is built from a variable, substitution or unusual characters");
+    if (!opts.git) return probeFailed(what, "git is not available to the guard");
+    const exists = opts.git.refExists(base, `refs/heads/${b}`);
+    if (exists === null) return probeFailed(what, "`git rev-parse` failed");
+    if (!exists) continue;
+    const n = opts.git.countRevs(base, [`refs/heads/${b}`, "--not", "--remotes"]);
+    if (n === null) return probeFailed(what, "`git rev-list` failed");
+    if (n > 0) return `${what} deletes ${n} commit${n === 1 ? "" : "s"} that no remote has. Push the branch first (\`git push -u origin ${b}\`), or approve only if they may go.`;
+  }
+  return "";
+}
+
+function rmWorktreeAsk(scan, opts) {
+  for (const call of rmCalls(scan)) {
+    if (!call.recursive || !call.ok) continue;
+    for (const w of call.targets) {
+      const target = rmTarget(w.raw, w.value, opts.vars);
+      if (target.climbs) continue;
+      const abs = /^[/~$]/.test(target.path) || !isAbsolute(opts.cwd || "") ? "" : joinPosix(opts.cwd, target.path);
+      if (reWorktreeRoot.test(target.path) || reWorktreeRoot.test(abs)) return `recursive rm of \`${target.shown}\` deletes a git worktree under .claude/worktrees/ with any uncommitted work, ignored files and commits no branch holds, and leaves a stale worktree record behind. ${WORKTREE_ROUTES}`;
+    }
+  }
+  return "";
+}
+
 export const TAG_WRITE_REASON = "writing a CACHEDIR.TAG file is denied: danger_guard lets a recursive rm through for a directory that carries one, so only the tool that owns the cache may create it.";
 
 export function isCacheDirTagPath(path) {
@@ -307,26 +633,31 @@ function tagRedirect(sub) {
 const HEREDOC_NOTE = " The match is in a heredoc body fed to an interpreter; if that text is data written into a file, write the file with a plain cat heredoc first.";
 const QUOTED_NOTE = (bin) => ` The match is inside a quoted string handed to \`${bin}\`, which runs it as a command.`;
 
-function guardDepth(cmd, depth, opts) {
+function guardDepth(cmd, depth, opts, check = subcommandReason) {
   if (depth > 3) return "";
   const stripped = stripCommentLines(stripTextHeredocs(cmd));
   const bodies = depth === 0 ? heredocBodyLines(stripped) : [];
   const inBody = (text) => bodies.some((l) => l.includes(text.trim()));
   const scans = [];
-  for (const sub of splitSubcommands(stripped)) {
+  const segments = splitSegments(stripped);
+  const vars = assignedVars(segments, opts.home);
+  const cwds = check === subcommandReason ? null : segmentCwds(segments, opts.cwd, opts.home);
+  for (let k = 0; k < segments.length; k++) {
+    const sub = segments[k].text;
     if (isTextOnly(sub)) continue;
     const [bin] = firstBin(sub);
     const scan = QUOTED_ARG_BINS.has(bin) ? stripQuotedArgs(sub) : sub;
     scans.push(scan);
-    const r = subcommandReason(scan, opts);
+    const r = check(scan, cwds ? { ...opts, vars: vars[k], cwd: cwds[k] } : { ...opts, vars: vars[k] }, sub);
     if (r) return inBody(sub) ? r + HEREDOC_NOTE : r;
     if (isWrapper(sub)) {
       for (const inner of quotedStrings(sub)) {
-        const ri = guardDepth(inner, depth + 1, opts);
+        const ri = guardDepth(inner, depth + 1, { ...opts, nested: true }, check);
         if (ri) return depth === 0 ? ri + QUOTED_NOTE(bin) : ri;
       }
     }
   }
+  if (check !== subcommandReason) return "";
   const sql = sqlDeleteReason(scans.join("\n"));
   const reDeleteOnce = new RegExp(reSQLDelete.source, "i");
   return sql && bodies.some((l) => reDeleteOnce.test(l)) ? sql + HEREDOC_NOTE : sql;
@@ -415,7 +746,8 @@ function findReason(cmd, opts) {
     }
     if (!destructive) continue;
     for (const root of roots) {
-      if (root === ".") continue;
+      const norm = normalizeTarget(root);
+      if (!norm.climbs && norm.path === ".") continue;
       const r = rmTargetReason(root, opts);
       if (r) return `\`find ${root} ... ${destructive}\` is denied (${r.replace(/\.$/, "")}).`;
     }
@@ -454,11 +786,19 @@ function gitPushReason(cmd, { protectedBranches }) {
   return "";
 }
 
-function rmReason(cmd, opts) {
+const reRecursiveFlag = /(^|\s)(--recursive|-[a-zA-Z]*[rR][a-zA-Z]*)(\s|$)/;
+
+function rmCalls(cmd) {
+  const calls = [];
   for (const m of cmd.matchAll(reRm)) {
+    const start = m.index + m[0].length - m[3].length;
+    const quoted = !unquotedAt(cmd, start);
+    const args = (quoted ? m[3] : cmd.slice(start)).replace(reBareMktemp, " ");
+    const parsed = shellWords(args, { lenient: quoted });
     let recursive = false;
     const targets = [];
-    for (const t of fields(m[3].replace(reBareMktemp, " "))) {
+    for (const w of parsed.words) {
+      const t = w.value;
       if (t === "--") continue;
       if (t.startsWith("--")) {
         if (t === "--recursive") recursive = true;
@@ -468,12 +808,21 @@ function rmReason(cmd, opts) {
         if (/[rR]/.test(t.slice(1))) recursive = true;
         continue;
       }
-      targets.push(t);
+      targets.push(w);
     }
-    if (!recursive) continue;
-    if (leadingBin(cmd.slice(0, m.index)) === "xargs") return "recursive rm through `xargs` is denied: the targets come from stdin and cannot be resolved; write the literal paths.";
-    for (const t of targets) {
-      const r = rmTargetReason(t, opts);
+    if (!parsed.ok) recursive = recursive || reRecursiveFlag.test(args);
+    calls.push({ index: m.index, recursive, targets, ok: parsed.ok, args });
+  }
+  return calls;
+}
+
+function rmReason(cmd, opts) {
+  for (const call of rmCalls(cmd)) {
+    if (!call.recursive) continue;
+    if (leadingBin(cmd.slice(0, call.index)) === "xargs") return "recursive rm through `xargs` is denied: the targets come from stdin and cannot be resolved; write the literal paths.";
+    if (!call.ok) return `recursive rm of \`${call.args.trim()}\` is denied: the guard cannot parse its quoting, so it cannot tell which paths are removed; write each path plainly quoted.`;
+    for (const w of call.targets) {
+      const r = rmTargetReason(w.raw, opts, w.value);
       if (r) return r;
     }
   }
@@ -481,26 +830,40 @@ function rmReason(cmd, opts) {
 }
 
 const VAR_OK = ["$CLAUDE_JOB_DIR", "$TMPDIR", "${CLAUDE_JOB_DIR", "${TMPDIR"];
+const reLexicalDots = /(^|\/)\.\.?(\/|$)/;
 
-function rmTargetReason(raw, { home, configDir, isCacheDir, isRepoRoot, root = "", cwd = "" }) {
-  const t = raw.replace(/^["']+|["']+$/g, "");
-  if (t === "") return "";
-  if (t.startsWith("$") && !VAR_OK.some((p) => t.startsWith(p))) return `recursive rm of \`${raw}\` is denied: the target is a shell variable the guard cannot resolve; write the literal path.`;
+function rmTarget(raw, value, vars) {
+  const resolved = resolveVar(value, vars);
+  const shown = resolved !== value ? `${raw} (= ${resolved})` : raw;
+  return { shown, lexical: resolved, ...normalizeTarget(resolved) };
+}
+
+function rmTargetReason(raw, opts, value = raw.replace(/^["']+|["']+$/g, "")) {
+  const { home, configDir, isCacheDir, isRepoRoot, root = "", cwd = "", vars } = opts;
+  if (value === "") return "";
+  const target = rmTarget(raw, value, vars);
+  const quotedRaw = raw;
+  raw = target.shown;
+  if (target.lexical === "") return "";
+  if (target.lexical.startsWith("$") && !VAR_OK.some((p) => target.lexical.startsWith(p))) return `recursive rm of \`${raw}\` is denied: the target is a shell variable the guard cannot resolve; write the literal path.`;
+  if (target.climbs) return `recursive rm of \`${raw}\` is denied: it climbs above the directory it starts from.`;
+  const t = target.path;
   if (t === "*" || t === "." || t === ".." || t === "/" || t === "~" || t === "~/" || t.startsWith("../") || (t.endsWith("/*") && (t.startsWith("/") || t.startsWith("~")) && !isTmpPath(t, home, configDir))) return `recursive rm of \`${raw}\` is denied.`;
   const base = baseName(t.endsWith("/") ? t.slice(0, -1) : t);
   if (base === ".git") return `recursive rm of \`${raw}\` is denied (it destroys the repository's history).`;
-  if (isTmpPath(t, home, configDir) || t.includes("/.claude/worktrees/")) return "";
   const relative = !t.startsWith("/") && !t.startsWith("~") && !t.startsWith("$");
+  if (!relative && /(^|\/)\.\.(\/|$)/.test(target.lexical)) return `recursive rm of \`${raw}\` is denied: an absolute path with a \`..\` segment gets no allowance; write the resolved path.`;
+  if (isTmpPath(t, home, configDir) || t.includes("/.claude/worktrees/")) return "";
   const expanded = t.startsWith("~") ? home + t.slice(1) : t;
   const abs = relative ? (cwd.startsWith("/") ? joinPosix(cwd, t) : "") : expanded.replace(/\/+$/, "") || "/";
   if (REGENERABLE_DIRS.has(base)) {
-    const why = abs ? regenerableExclusion(abs, { home, isRepoRoot: cacheDirCandidate(raw, abs) ? isRepoRoot : null }) : "";
+    const why = abs ? regenerableExclusion(abs, { home, isRepoRoot: cacheDirCandidate(quotedRaw, abs) ? isRepoRoot : null }) : "";
     if (!why) return "";
     return `recursive rm of \`${raw}\` is denied: ${why}.`;
   }
   if (relative) return "";
   if (home && (expanded === home || expanded === home + "/")) return "recursive rm of the home directory is denied.";
-  if (cacheDirCandidate(raw, expanded)) {
+  if (cacheDirCandidate(quotedRaw, expanded) && !reLexicalDots.test(target.lexical)) {
     if (isCacheDir && isCacheDir(abs)) return "";
     if (scratchAncestor(abs, { home, root, isCacheDir, isRepoRoot })) return "";
   }

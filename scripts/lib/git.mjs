@@ -74,6 +74,20 @@ export function makeGit(onGit) {
     isAncestor(dir, a, b) {
       return run(dir, ["merge-base", "--is-ancestor", a, b]).ok;
     },
+    ignoredPaths(dir) {
+      const r = run(dir, ["ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "--no-empty-directory"]);
+      return r.ok ? r.out.split("\n").filter(Boolean) : null;
+    },
+    countRevs(dir, args) {
+      const r = run(dir, ["rev-list", "--count", ...args]);
+      const n = Number(r.out.trim());
+      return r.ok && r.out.trim() !== "" && Number.isInteger(n) ? n : null;
+    },
+    refExists(dir, ref) {
+      const r = run(dir, ["rev-parse", "--verify", "--quiet", ref]);
+      if (r.ok) return true;
+      return r.status === 1 ? false : null;
+    },
     defaultBranch(dir) {
       const r = run(dir, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
       return r.ok ? r.out.trim() : "";

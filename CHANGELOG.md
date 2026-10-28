@@ -2,6 +2,12 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.12.0] - 2026-10-28
+
+- `danger_guard` reads recursive `rm` targets with shell quoting and resolves `.` and `..` first (D47). `rm -rf "/Users/x/dist precious"` is now judged as one path and denied (before, the space split it and `dist` passed); `rm -rf ./src/..`, `rm -rf a/../..` and `rm -rf ./*` are denied; an absolute path with a `..` segment gets no allowance; an unterminated quote denies.
+- A recursive `rm` of a variable set to a literal earlier in the same command is judged by its value: `S=$HOME/.claude/jobs/x/tmp/hl && rm -rf $S` passes, `S=/ && rm -rf $S` and `S=$(pwd) && rm -rf $S` stay denied.
+- New ask verdict for deletions that can lose work (denied under `bypassPermissions`): `git worktree remove --force`, a recursive `rm` of a `.claude/worktrees/<name>` folder, a plain `git worktree remove` of a worktree holding ignored files such as `.env` or commits only its detached HEAD holds, and `git branch -D` of a branch with commits no remote has. A protected branch stays denied.
+
 ## [0.11.2] - 2026-10-27
 
 - `decisions.jsonl` no longer stores the Bash command of a `danger_guard` or `live_guard` stop, only the guard, verdict and the reason shown to Claude (D46). The Anthropic Software Directory Policy does not allow collecting extraneous conversation data, even for logging.
