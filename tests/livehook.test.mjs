@@ -136,7 +136,7 @@ test("a repository can only tighten live_guard", () => {
   const c = loadConfig({ env: {}, sessionRoot: a });
   assert.equal(c.liveGuard, true);
   assert.equal(c.liveGuardDesktop, false);
-  assert.equal(c.relaunchLimit, 5);
+  assert.equal(c.relaunchLimit, 10);
   assert.ok(c.warnings.some((w) => /liveGuard false is ignored/.test(w)));
   assert.ok(c.warnings.some((w) => /relaunchLimit 50 is ignored/.test(w)));
   for (const file of ["settings.json", "settings.local.json"]) {

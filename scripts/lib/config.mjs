@@ -7,7 +7,7 @@ const defaultMode = DEFAULT_MODE;
 const modeList = MODES.join(", ");
 const optionPrefix = OPTION_PREFIX;
 
-export const DEFAULT_RELAUNCH_LIMIT = 5;
+export const DEFAULT_RELAUNCH_LIMIT = 10;
 
 const WIDENING_KEYS = new Set(["extraAllowedDirs", "extra_allowed_dirs", "hubRepos", "hub_repos", "allowedDirs", "allowed_dirs", "additionalDirectories"]);
 

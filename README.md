@@ -78,7 +78,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `danger_guard` | `true` | deny data-destroying Bash commands in every permission mode (see [Data-destroying commands](#data-destroying-commands)) |
 | `live_guard` | `true` | deny process kills and power commands that reach far beyond the session, and ask before commands that disrupt the user's running machine (see [The running machine](#the-running-machine)) |
 | `live_guard_desktop` | `false` | with `live_guard`, also ask before `pbcopy`, `say`, `afplay`, `cliclick`, `open` without `-g`, and AppleScript keystrokes, dialogs, volume, clipboard or `activate` |
-| `relaunch_limit` | `5` | with `live_guard`, ask before this session launches or brings the same app to the front more than this many times within 60 minutes (denied under `bypassPermissions`); `0` turns it off |
+| `relaunch_limit` | `10` | with `live_guard`, ask before this session launches or brings the same app to the front more than this many times within 60 minutes (denied under `bypassPermissions`); `0` turns it off |
 | `session_hint` | `true` | at session start, hand Claude three sentences on how to avoid a `danger_guard` denial (a literal path for a recursive `rm`, no destructive statements in text fed to an interpreter) and, with `live_guard` on, one sentence on stopping processes by PID; off, or with both guards off, nothing is added |
 | `protected_branches` | `main`, `master`, `production`, `prod`, `development`, `develop`, `dev`, `release`, `staging` | branches a force-push to is denied |
 | `deny_aws_s3_deletes` | `true` | also deny `aws s3 rm`/`rb` and `aws s3api delete-*` |

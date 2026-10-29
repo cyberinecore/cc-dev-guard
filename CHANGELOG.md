@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.13.0] - 2026-10-29
+
+- `relaunch_limit` now defaults to 10 launches per app per 60 minutes, up from 5 (D48). A value set in the plugin options is kept, and a repository file can still only lower it.
+
 ## [0.12.1] - 2026-10-29
 
 - The decision-log test builds its fake GitHub token at run time, so no shipped file holds a string shaped like a real token (directory policy flagged `tests/decisionlog.test.mjs`).
