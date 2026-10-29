@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.14.3] - 2026-10-29
+
+- A plain `git worktree remove` no longer asks (denied under `bypassPermissions`) when a worktree's only ignored files sit in regenerable folders below an ignored folder, such as `.local/tmp/`. Git reports an ignored folder as one entry, so its `tmp/` was never seen; devguard now lists the files inside such a folder (D51).
+- The message names the subfolders that would be lost (`.local/bench/`, not `.local/`) and says a copy is not enough: the files must be moved out or deleted once the user says they may go.
+
 ## [0.14.2] - 2026-10-29
 
 - The nested-repository hint from 0.14.1 now applies only when the other repository is inside the session's working directory, not anywhere under the repository top, and says where to find the options (/config) and that they last across sessions (D50).

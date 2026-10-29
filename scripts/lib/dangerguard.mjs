@@ -568,7 +568,22 @@ function worktreeLoss(p, g, { git, home, cwd }) {
   const lost = [];
   const ignored = git.ignoredPaths(entry.path);
   if (!ignored) return probeFailed(what, "`git ls-files --ignored` failed");
-  const kept = ignored.filter((x) => !x.split("/").some((seg) => REGENERABLE_DIRS.has(seg)));
+  const regenerable = (x) => x.split("/").some((seg) => REGENERABLE_DIRS.has(seg));
+  const kept = [];
+  for (const x of ignored) {
+    if (regenerable(x)) continue;
+    if (!x.endsWith("/")) {
+      kept.push(x);
+      continue;
+    }
+    const inner = git.ignoredPaths(entry.path, x);
+    if (!inner) return probeFailed(what, "`git ls-files --ignored` failed");
+    const left = [...new Set(inner.filter((y) => !regenerable(y)).map((y) => {
+      const segs = y.slice(x.length).split("/");
+      return segs.length > 1 ? `${x}${segs[0]}/` : y;
+    }))];
+    kept.push(...left);
+  }
   if (kept.length) lost.push(`ignored files that no commit holds (${listed(kept)})`);
   if (entry.detached && entry.head) {
     const n = git.countRevs(base, [entry.head, "--not", "--branches", "--tags", "--remotes"]);
@@ -576,7 +591,7 @@ function worktreeLoss(p, g, { git, home, cwd }) {
     if (n > 0) lost.push(`${n} commit${n === 1 ? "" : "s"} reachable only from its detached HEAD \`${entry.head.slice(0, 12)}\``);
   }
   if (!lost.length) return "";
-  return `${what} deletes ${lost.join(" and ")}. Keep them first (copy the files out; \`git -C ${entry.path} branch <name>\` keeps the commits), or approve only if they may go.`;
+  return `${what} deletes ${lost.join(" and ")}. Move those files out or delete them once the user says they may go (a copy is not enough: the check looks at what is still in the worktree; regenerable folders such as tmp/, dist/ and node_modules/ do not count), and \`git -C ${entry.path} branch <name>\` keeps the commits; or approve only if they may go.`;
 }
 
 function branchDeleteAsk(g, opts) {
