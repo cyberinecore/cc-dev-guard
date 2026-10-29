@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.12.1] - 2026-10-29
+
+- The decision-log test builds its fake GitHub token at run time, so no shipped file holds a string shaped like a real token (directory policy flagged `tests/decisionlog.test.mjs`).
+
 ## [0.12.0] - 2026-10-28
 
 - `danger_guard` reads recursive `rm` targets with shell quoting and resolves `.` and `..` first (D47). `rm -rf "/Users/x/dist precious"` is now judged as one path and denied (before, the space split it and `dist` passed); `rm -rf ./src/..`, `rm -rf a/../..` and `rm -rf ./*` are denied; an absolute path with a `..` segment gets no allowance; an unterminated quote denies.

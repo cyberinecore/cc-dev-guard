@@ -17,7 +17,8 @@ function setup(log = "true") {
 
 test("log_decisions records danger_guard and live_guard denials with the guard and reason, never the command", () => {
   const { run, lines, env } = setup();
-  run("Bash", { command: "GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123456789 git reset --hard HEAD" });
+  const fakeToken = ["ghp", "x".repeat(36)].join("_");
+  run("Bash", { command: `GITHUB_TOKEN=${fakeToken} git reset --hard HEAD` });
   run("Bash", { command: "pkill node" });
   const [danger, live] = lines();
   assert.equal(danger.guard, "danger");
