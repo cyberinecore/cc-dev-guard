@@ -8,21 +8,6 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        node: [18, 20, 22]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node }}
-      - run: git config --global user.email ci@example.invalid && git config --global user.name ci && git config --global protocol.file.allow always
-      - run: npm test
-
   validate:
     runs-on: ubuntu-latest
     steps:

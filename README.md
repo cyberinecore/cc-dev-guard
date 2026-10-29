@@ -232,7 +232,7 @@ Hooks run in Claude Code and Cowork; the claude.ai chat surface ignores hooks, s
 
 ## Development
 
-`npm test` runs the unit suite (real git repositories in temp dirs). `tests/live/matrix.sh`, `tests/live/failures.sh` and `tests/live/worktrees.sh` drive real `claude -p` sessions and spend model quota; `node tests/live/latency.mjs` measures per-call cost. Design decisions and their evidence are in `docs/DECISIONS.md`, the adversarial review in `docs/SECURITY-REVIEW.md`.
+The repository ships no tests since 0.14.0. The last unit suite and live probes are at tag `cyberine-devguard--v0.13.1` (`git checkout cyberine-devguard--v0.13.1 -- tests`, then `node tests/run.mjs`). Design decisions and their evidence are in `docs/DECISIONS.md`, the adversarial review in `docs/SECURITY-REVIEW.md`.
 
 ## License
 

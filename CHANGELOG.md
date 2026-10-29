@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.14.0] - 2026-10-29
+
+- `tests/` is removed from the repository, so the plugin directory no longer scans test fixtures (D49). CI runs plugin validation only. The last suite is at tag `cyberine-devguard--v0.13.1`. No hook behaviour changes.
+
 ## [0.13.1] - 2026-10-29
 
 - The decision-log tests no longer hold any secret-shaped literal: the command-not-logged test uses a plain marker variable, and the `redactCommand` cases build their credential-like inputs at run time (the directory policy still flagged `tests/decisionlog.test.mjs` after 0.12.1).

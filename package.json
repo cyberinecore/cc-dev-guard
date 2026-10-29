@@ -1,12 +1,9 @@
 {
   "name": "cyberine-devguard-plugin",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "private": true,
   "type": "module",
   "engines": {
     "node": ">=18"
-  },
-  "scripts": {
-    "test": "node tests/run.mjs"
   }
 }
