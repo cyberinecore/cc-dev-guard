@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.14.1] - 2026-10-29
+
+- When the other repository sits inside the session repository (a submodule or nested repository), the ask no longer suggests `/add-dir`, which in Claude Code 2.1.310 to 2.1.312 only loads that folder's skills and grants nothing. It suggests `extra_allowed_dirs` or, for a submodule, `hub_repos` (D50).
+
 ## [0.14.0] - 2026-10-29
 
 - `tests/` is removed from the repository, so the plugin directory no longer scans test fixtures (D49). CI runs plugin validation only. The last suite is at tag `cyberine-devguard--v0.13.1`. No hook behaviour changes.

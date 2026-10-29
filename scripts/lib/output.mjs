@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { ALLOWED_DIRS_SHOWN, NAME, REPO_CONFIG_FILE, RETRY_WINDOW_MS } from "./constants.mjs";
 
 const pluginName = NAME;
@@ -49,7 +49,16 @@ function alwaysAskReason(v) {
   }
 }
 
+function insideSessionRepo(v) {
+  if (!v.targetTop || !v.sessionTop || v.targetTop === v.sessionTop) return false;
+  const top = v.sessionTop.endsWith(sep) ? v.sessionTop : v.sessionTop + sep;
+  return v.targetTop.startsWith(top);
+}
+
 export function fixHint(v) {
+  if (v.why !== "other-worktree" && insideSessionRepo(v)) {
+    return `To allow it, the user can add \`${v.targetTop}\` to the ${pluginName} option extra_allowed_dirs (/config), or, when it is a submodule of \`${v.sessionTop}\`, add \`${v.sessionTop}\` to the option hub_repos; \`/add-dir\` on a folder inside the working directory only loads its skills in recent Claude Code (seen in 2.1.310 to 2.1.312), so it does not allow writes there.`;
+  }
   const dir = dirname(v.resolved || v.target);
   return `To allow it, the user can run \`/add-dir ${dir}\` for this session, or add \`${dir}\` to the ${pluginName} option extra_allowed_dirs (/config) for every session; a path the other repository gitignores also passes.`;
 }
