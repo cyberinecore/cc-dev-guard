@@ -139,6 +139,7 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
     targetRepo,
     targetTop: git.toplevel(r.dir),
     sessionTop,
+    sessionRoot: s.root ? resolveDir(s.root) : "",
     allowed,
   };
 }

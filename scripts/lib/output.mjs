@@ -49,15 +49,16 @@ function alwaysAskReason(v) {
   }
 }
 
-function insideSessionRepo(v) {
-  if (!v.targetTop || !v.sessionTop || v.targetTop === v.sessionTop) return false;
-  const top = v.sessionTop.endsWith(sep) ? v.sessionTop : v.sessionTop + sep;
+function insideWorkingDir(v) {
+  const root = v.sessionRoot || "";
+  if (!v.targetTop || !root || v.targetTop === root) return false;
+  const top = root.endsWith(sep) ? root : root + sep;
   return v.targetTop.startsWith(top);
 }
 
 export function fixHint(v) {
-  if (v.why !== "other-worktree" && insideSessionRepo(v)) {
-    return `To allow it, the user can add \`${v.targetTop}\` to the ${pluginName} option extra_allowed_dirs (/config), or, when it is a submodule of \`${v.sessionTop}\`, add \`${v.sessionTop}\` to the option hub_repos; \`/add-dir\` on a folder inside the working directory only loads its skills in recent Claude Code (seen in 2.1.310 to 2.1.312), so it does not allow writes there.`;
+  if (v.why !== "other-worktree" && insideWorkingDir(v)) {
+    return `To allow it, the user can open /config, find the ${pluginName} options, and add \`${v.sessionTop}\` to hub_repos to cover this repository's submodules, or \`${v.targetTop}\` to extra_allowed_dirs to cover just this one; both last across sessions. \`/add-dir\` does not help here: for a folder inside the working directory, Claude Code 2.1.312 only loads its skills and grants no write access.`;
   }
   const dir = dirname(v.resolved || v.target);
   return `To allow it, the user can run \`/add-dir ${dir}\` for this session, or add \`${dir}\` to the ${pluginName} option extra_allowed_dirs (/config) for every session; a path the other repository gitignores also passes.`;

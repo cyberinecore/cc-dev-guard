@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.14.2] - 2026-10-29
+
+- The nested-repository hint from 0.14.1 now applies only when the other repository is inside the session's working directory, not anywhere under the repository top, and says where to find the options (/config) and that they last across sessions (D50).
+
 ## [0.14.1] - 2026-10-29
 
 - When the other repository sits inside the session repository (a submodule or nested repository), the ask no longer suggests `/add-dir`, which in Claude Code 2.1.310 to 2.1.312 only loads that folder's skills and grants nothing. It suggests `extra_allowed_dirs` or, for a submodule, `hub_repos` (D50).
