@@ -57,7 +57,7 @@ const reGitStashClear = /\bgit\s+(?:-C\s+\S+\s+)?stash\s+clear\b/;
 
 const reTagMention = /cachedir\.tag/i;
 const TAG_WRITE_BINS = new Set(["cp", "mv", "ln", "install", "rsync", "ditto", "tar", "unzip", "dd", "tee", "touch", "curl", "wget", "scp"]);
-const REGENERABLE_DIRS =new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", "target", "__pycache__", ".pytest_cache", ".mypy_cache", ".venv", "venv", ".parcel-cache", ".vite", ".svelte-kit", "tmp", ".tmp", "temp", ".DS_Store"]);
+const REGENERABLE_DIRS =new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", "target", ".build", "__pycache__", ".pytest_cache", ".mypy_cache", ".venv", "venv", ".parcel-cache", ".vite", ".svelte-kit", "tmp", ".tmp", "temp", ".DS_Store"]);
 const TEXT_TOOLS = new Set(["echo", "printf", "grep", "rg", "egrep", "fgrep", "ugrep", "sed", "awk", "cat", "head", "tail", "less", "more", "wc", "sort", "uniq", "cut", "tr", "diff", "comm", "tee", "jq", "yq", "column", "fold", "nl", "od", "xxd"]);
 const GIT_TEXT_SUBCOMMANDS = new Set(["log", "grep", "show", "diff", "blame"]);
 const WRAPPER_BINS = new Set(["ssh", "bash", "sh", "zsh", "eval", "xargs", "sudo", "nohup", "timeout", "gtimeout", "caffeinate", "env", "script"]);
@@ -188,7 +188,11 @@ function opKind(op) {
   return "other";
 }
 
+const reMktempValue = /^(["']?)\$\(mktemp(?:\s+[^\s()`;|&<>]+)*\s*\)\1$/;
+export const MKTEMP_VALUE = "$TMPDIR/mktemp-made";
+
 function literalValue(raw, value, home) {
+  if (reMktempValue.test(raw)) return MKTEMP_VALUE;
   if (/`|\$\(/.test(raw)) return null;
   let v = value;
   const homeRef = /^\$(?:HOME(?!\w)|\{HOME\})/.exec(v);
@@ -568,7 +572,7 @@ function worktreeLoss(p, g, { git, home, cwd }) {
   const lost = [];
   const ignored = git.ignoredPaths(entry.path);
   if (!ignored) return probeFailed(what, "`git ls-files --ignored` failed");
-  const regenerable = (x) => x.split("/").some((seg) => REGENERABLE_DIRS.has(seg));
+  const regenerable = (x) => x.split("/").some((seg) => REGENERABLE_DIRS.has(seg)) || /\.tsbuildinfo$/.test(x);
   const kept = [];
   for (const x of ignored) {
     if (regenerable(x)) continue;
@@ -878,6 +882,7 @@ function rmTargetReason(raw, opts, value = raw.replace(/^["']+|["']+$/g, "")) {
   if (target.lexical.startsWith("$") && !VAR_OK.some((p) => target.lexical.startsWith(p))) return `recursive rm of \`${raw}\` is denied: the target is a shell variable the guard cannot resolve; write the literal path.`;
   if (target.climbs) return `recursive rm of \`${raw}\` is denied: it climbs above the directory it starts from.`;
   const t = target.path;
+  if (isHomeCache(t, home) && !reLexicalDots.test(target.lexical)) return "";
   if (t === "*" || t === "." || t === ".." || t === "/" || t === "~" || t === "~/" || t.startsWith("../") || (t.endsWith("/*") && (t.startsWith("/") || t.startsWith("~")) && !isTmpPath(t, home, configDir))) return `recursive rm of \`${raw}\` is denied.`;
   const base = baseName(t.endsWith("/") ? t.slice(0, -1) : t);
   if (base === ".git") return `recursive rm of \`${raw}\` is denied (it destroys the repository's history).`;
@@ -936,6 +941,17 @@ function cacheDirCandidate(raw, expanded) {
   if (/^["']/.test(raw) !== /["']$/.test(raw)) return false;
   if (!expanded.startsWith("/") || /[*?[\]{}$`\\]/.test(expanded)) return false;
   return !expanded.split("/").some((seg) => seg === "." || seg === ".." || seg === ".git");
+}
+
+const HOME_CACHES = ["Library/Developer/Xcode/DerivedData", ".npm/_npx", ".npm/_cacache", ".bun/install/cache", "Library/Caches/pip", "Library/Caches/go-build", "Library/Caches/Homebrew", "Library/Caches/Yarn", "Library/Caches/ms-playwright", ".cache/puppeteer"];
+
+function isHomeCache(t, home) {
+  if (!home) return false;
+  const abs = (t.startsWith("~/") ? home + t.slice(1) : t).replace(/\/\*$/, "").replace(/\/+$/, "");
+  return HOME_CACHES.some((c) => {
+    const base = `${home}/${c}`;
+    return abs === base || abs.startsWith(base + "/");
+  });
 }
 
 function isTmpPath(t, home, configDir = "") {

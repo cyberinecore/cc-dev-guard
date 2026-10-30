@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.15.0] - 2026-10-31
+
+- `danger_guard` stops four measured false positives (D52, 28 of 71 denials logged 2026-10-27 to 10-30): a worktree whose only ignored files are `*.tsbuildinfo` or a `.build/` folder can be removed with a plain `git worktree remove`; a recursive `rm` of a variable assigned `$(mktemp ...)` earlier in the same command is treated as a temp folder; recursive `rm` of the package-manager and Xcode caches under `$HOME` passes; `.build` joins the regenerable folder names.
+- Cross-repository decisions in `decisions.jsonl` now carry `guard: "scope"`, the reason and the version, and the target is written with `~` for the home folder.
+
 ## [0.14.3] - 2026-10-29
 
 - A plain `git worktree remove` no longer asks (denied under `bypassPermissions`) when a worktree's only ignored files sit in regenerable folders below an ignored folder, such as `.local/tmp/`. Git reports an ignored folder as one entry, so its `tmp/` was never seen; devguard now lists the files inside such a folder (D51).

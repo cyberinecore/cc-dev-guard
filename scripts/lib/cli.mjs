@@ -53,7 +53,10 @@ function logDecision(env, input, verdict, out, now) {
   if (!isAbsolute(env.CLAUDE_PLUGIN_DATA || "")) return;
   try {
     mkdirSync(env.CLAUDE_PLUGIN_DATA, { recursive: true });
-    const line = { time: new Date(now).toISOString(), session: input.session_id ?? "", tool: input.tool_name ?? "", target: verdict.target, verdict: verdictWord(out), why: verdict.why };
+    const home = env.HOME || env.USERPROFILE || "";
+    const reason = String(out?.hookSpecificOutput?.permissionDecisionReason || "");
+    const target = typeof verdict.target === "string" && home ? verdict.target.split(home).join("~") : verdict.target;
+    const line = { time: new Date(now).toISOString(), session: input.session_id ?? "", tool: input.tool_name ?? "", guard: "scope", verdict: verdictWord(out), reason: redactCommand(reason, home).slice(0, 300), version: VERSION, target, why: verdict.why };
     appendFileSync(join(env.CLAUDE_PLUGIN_DATA, "decisions.jsonl"), JSON.stringify(line) + "\n", { mode: 0o600 });
   } catch {}
 }
@@ -87,7 +90,7 @@ function logGuard(env, config, input, guard, out, now) {
 
 export const SESSION_HINT = [
   `${pluginName} denies data-destroying Bash commands in every permission mode; a command that is really needed goes to the user to run. To avoid a denial:`,
-  "- Recursive rm: write the full target path literally, never through a variable or command substitution; the guard cannot resolve those and denies them.",
+  "- Recursive rm: write the full target path literally, or use a variable assigned a literal path or `$(mktemp -d)` earlier in the same command; any other variable or command substitution is denied.",
   "- Put scratch files in a `mktemp -d` dir, $CLAUDE_JOB_DIR/tmp or <repo>/tmp/; those, and paths below a build or cache dir, may be deleted.",
   "- Text handed to an interpreter or database client (a shell, a remote shell, an SQL client, an inline script) is scanned like a command, so a statement that drops or empties a table, or a recursive delete, inside that text is denied. Write such text to a file with a plain cat heredoc first; that body is not scanned.",
 ].join("\n");
