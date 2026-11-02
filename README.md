@@ -66,7 +66,8 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 
 | option | default | meaning |
 |---|---|---|
-| `mode` | `ask` | `ask`, `deny-once`, `warn` or `off` |
+| `profile` | `assist` | `assist` or `strict`; see [Profiles](#profiles) |
+| `mode` | `ask` | `ask`, `deny-once`, `warn` or `off`; covers writes to another repository only |
 | `extra_allowed_dirs` | none | absolute directories every session may write to |
 | `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts) |
 | `allow_ignored` | `true` | let writes to paths the other repository gitignores pass |
@@ -75,7 +76,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `bash_guard` | `true` | read each Bash command for obvious writes (see [Bash and MCP writes](#bash-and-mcp-writes)) and treat each target like a file-tool write |
 | `isolate_worktrees` | `false` | ask before a session started in a linked worktree writes into the main checkout or another worktree of the same repository (file tools, Bash writes, MCP writes) |
 | `worktree_guard` | `true` | ask before a Bash `git worktree add` whose path lies outside the repository's `.claude/worktrees/` |
-| `danger_guard` | `true` | deny data-destroying Bash commands in every permission mode (see [Data-destroying commands](#data-destroying-commands)) |
+| `danger_guard` | `true` | deny data-destroying Bash commands; under `profile` `assist` a match the guard cannot prove asks instead (see [Data-destroying commands](#data-destroying-commands)) |
 | `live_guard` | `true` | deny process kills and power commands that reach far beyond the session, and ask before commands that disrupt the user's running machine (see [The running machine](#the-running-machine)) |
 | `live_guard_desktop` | `false` | with `live_guard`, also ask before `pbcopy`, `say`, `afplay`, `cliclick`, `open` without `-g`, and AppleScript keystrokes, dialogs, volume, clipboard or `activate` |
 | `relaunch_limit` | `10` | with `live_guard`, ask before this session launches or brings the same app to the front more than this many times within 60 minutes (denied under `bypassPermissions`); `0` turns it off |
@@ -117,9 +118,21 @@ The parser follows quotes, `cd` within the command, subshells and heredocs (a he
 
 Write tools of the reference filesystem MCP server (`@modelcontextprotocol/server-filesystem`) are judged too: `write_file`, `edit_file` (not with `dryRun`), `create_directory`, and `move_file` (both the source and the destination). A tool is matched by its name and by that server's documented input schema, so a different server's tool with the same name but other arguments is left alone. Other MCP servers are not seen.
 
+## Profiles
+
+`profile` decides how hard a guard stops when it is not sure. Proven data loss is denied in both profiles and in every permission mode: `git reset --hard`, `git clean -f`, DROP/TRUNCATE, `docker system prune`, a recursive `rm` of `/`, `~`, `.` or `.git`, and the other fixed patterns below. A `git branch -D` that drops unpushed commits and a `git worktree remove` that loses uncommitted or ignored files ask, and are denied under `bypassPermissions`.
+
+| | default, acceptEdits, plan | auto | bypassPermissions |
+|---|---|---|---|
+| `assist` (default): a match the guard cannot prove (recursive `rm` of a variable or of a specific absolute path, `rm` through `xargs` or with broken quoting, a delete it could not check, a match inside a heredoc fed to an interpreter) | ask | nothing: Claude Code's auto-mode classifier decides | denied once; the same command retried in the same directory within 10 minutes passes |
+| `assist`: a write to another repository, a `git worktree add` outside `.claude/worktrees/`, a `live_guard` ask (`pkill -f`, `kill` by port, `tmux kill-session`) | ask | nothing: the classifier decides | as before: deny-once |
+| `strict`: everything above | as 0.15.0: deny or ask | as 0.15.0 | as 0.15.0 |
+
+In auto mode a hook `ask` is not handed to the classifier: Claude Code asks you directly, so `assist` emits nothing there and lets the classifier judge. Writes to settings files, `cyberine-devguard` configuration, transcripts and `protect` paths still ask in every profile. A repository's `.claude/cyberine-devguard.json` may set `"profile": "strict"`, never `assist`.
+
 ## Data-destroying commands
 
-With `danger_guard` on (the default), a Bash command that destroys data or rewrites shared history is denied in every permission mode, `bypassPermissions` included, and whatever `mode` is set to. The reason tells Claude to hand the exact command to you instead of rephrasing it.
+With `danger_guard` on (the default), a Bash command that destroys data or rewrites shared history is denied, `bypassPermissions` included, and whatever `mode` is set to; under `profile` `assist` the uncertain matches listed in [Profiles](#profiles) ask instead. The reason tells Claude to hand the exact command to you instead of rephrasing it.
 
 - recursive `rm` (`-r`, `-R`, `--recursive`; also `\rm`, `/bin/rm` and any other path to `rm`) of `/`, `~`, `.`, `..`, `*`, a `../` path, a target held in a shell variable (a variable assigned a literal path or `$(mktemp ...)` earlier in the same command is judged by that value; a `mktemp` result counts as a temp folder), a `.git` directory anywhere, or any absolute or `~` path, except temp folders (`/tmp`, `/var/tmp`, the macOS `/var/folders/.../T/` folders, `$TMPDIR`, `$CLAUDE_JOB_DIR`, `~/.claude/jobs/`), paths inside a `.claude/worktrees/<name>/` folder, regenerable folders (`node_modules`, `dist`, `build`, `.build`, `.next`, `coverage`, `.venv` and similar), the package-manager and Xcode caches under `$HOME` (`Library/Developer/Xcode/DerivedData`, `.npm/_npx`, `.npm/_cacache`, `.bun/install/cache`, `Library/Caches/{pip,go-build,Homebrew,Yarn,ms-playwright}`, `.cache/puppeteer`) and any folder that carries a valid `CACHEDIR.TAG`, the cache marker cargo, SwiftPM, uv, tox, nox, ruff, pytest and mypy write (checked on the real path; never `$HOME`, `/` or inside `.git`), plus any path below the nearest such folder inside the session repository or `$HOME` (`target/debug/bundle/...`, `<repo>/tmp/exp1`), never past a repository root; a regenerable name does not count for a folder directly in `$HOME`, inside `.git`, or at a repository root; an absolute path with a `..` segment gets none of these allowances. Targets are read with shell quoting (`"/a/dist precious"` is one path; an unterminated quote denies) and `.`/`..` are resolved first, so a relative target that resolves to `.` or above (`./src/..`, `a/../..`, `./*`) is denied. A variable set to a literal earlier in the same command (`S=$HOME/.claude/jobs/x/tmp && rm -rf $S`) is resolved and judged by its value; a substitution, a reassignment, a pipe, `||`, `&` or a subshell keeps the deny;
 - writing a file named `CACHEDIR.TAG` (Write, Edit, NotebookEdit, filesystem MCP writes, or a Bash redirect into one, `cp`, `mv`, `ln`, `tee`, `touch` and similar naming one; `2>&1` or `2>/dev/null` after a command that only reads a tag passes), because a tag unlocks the delete above;

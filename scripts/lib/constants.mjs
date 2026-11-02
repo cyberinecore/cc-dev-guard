@@ -1,7 +1,9 @@
 export const NAME = "cyberine-devguard";
-export const VERSION = "0.15.0";
+export const VERSION = "0.16.0";
 export const MODES = ["off", "warn", "deny-once", "ask"];
 export const DEFAULT_MODE = "ask";
+export const PROFILES = ["assist", "strict"];
+export const DEFAULT_PROFILE = "assist";
 export const RETRY_WINDOW_MS = 10 * 60 * 1000;
 export const ALLOWED_DIRS_SHOWN = 10;
 export const PATH_KEYS = ["file_path", "notebook_path"];

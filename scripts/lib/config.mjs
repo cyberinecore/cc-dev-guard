@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
-import { DEFAULT_MODE, MODES, OPTION_PREFIX, REPO_CONFIG_FILE } from "./constants.mjs";
+import { DEFAULT_MODE, DEFAULT_PROFILE, MODES, OPTION_PREFIX, PROFILES, REPO_CONFIG_FILE } from "./constants.mjs";
 import { DEFAULT_PROTECTED_BRANCHES } from "./dangerguard.mjs";
 
 const defaultMode = DEFAULT_MODE;
@@ -14,6 +14,7 @@ const WIDENING_KEYS = new Set(["extraAllowedDirs", "extra_allowed_dirs", "hubRep
 export function defaultConfig() {
   return {
     mode: DEFAULT_MODE,
+    profile: DEFAULT_PROFILE,
     extraAllowedDirs: [],
     hubRepos: [],
     allowIgnored: true,
@@ -49,7 +50,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit"];
+export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -145,6 +146,11 @@ function applyRepoFile(c, file) {
       else if (value === "off") w.push(`${where} mode "off" is ignored: a repository file can only make the guard stricter`);
       else if (modeRank(value) < modeRank(c.mode)) w.push(`${where} mode "${value}" is looser than "${c.mode}"; ignored`);
       else c.mode = value;
+    } else if (optionName === "profile") {
+      if (value === "strict") c.profile = "strict";
+      else if (value === "assist") {
+        if (c.profile === "strict") w.push(`${where} profile "assist" is ignored: a repository file can only make the guard stricter`);
+      } else w.push(`${where} profile must be "assist" or "strict"; ignored`);
     } else if (optionName === "allowIgnored") {
       if (value === false) c.allowIgnored = false;
       else if (value === true && !c.allowIgnored) w.push(`${where} allowIgnored true is ignored: a repository file cannot turn it back on`);
@@ -233,6 +239,11 @@ export function loadConfig({ env = {}, sessionRoot } = {}) {
     if (MODES.includes(mode)) c.mode = mode;
     else w.push(`option mode: "${mode}" is not one of ${modeList}; using ${defaultMode}`);
   }
+  const profile = option(env, "profile");
+  if (profile !== undefined && profile !== "") {
+    if (PROFILES.includes(profile)) c.profile = profile;
+    else w.push(`option profile: "${profile}" is not one of ${PROFILES.join(", ")}; using ${DEFAULT_PROFILE}`);
+  }
   c.extraAllowedDirs = parseDirList(option(env, "extra_allowed_dirs"), "extra_allowed_dirs", w);
   c.hubRepos = parseDirList(option(env, "hub_repos"), "hub_repos", w);
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
@@ -270,6 +281,7 @@ function applyRepoEnv(c, repoEnv, file) {
   const where = `${file} env`;
   for (const [optionName, raw] of Object.entries(repoEnv)) {
     if (optionName === "mode" && MODES.includes(raw) && raw !== "off" && modeRank(raw) >= modeRank(c.mode)) c.mode = raw;
+    else if (optionName === "profile" && raw === "strict") c.profile = "strict";
     else if (optionName === "allow_ignored" && raw === "false") c.allowIgnored = false;
     else if (optionName === "allow_ignored_nested_repos" && raw === "false") c.allowIgnoredNestedRepos = false;
     else if (optionName === "worktree_guard" && raw === "true") c.worktreeGuard = true;

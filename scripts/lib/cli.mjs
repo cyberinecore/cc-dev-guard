@@ -89,7 +89,7 @@ function logGuard(env, config, input, guard, out, now) {
 }
 
 export const SESSION_HINT = [
-  `${pluginName} denies data-destroying Bash commands in every permission mode; a command that is really needed goes to the user to run. To avoid a denial:`,
+  `${pluginName} denies data-destroying Bash commands; under profile assist a command it cannot prove destructive (a variable target, a specific absolute path) asks, is left to auto mode, or is denied once under bypassPermissions. A command that is really needed and still denied goes to the user to run. To avoid a stop:`,
   "- Recursive rm: write the full target path literally, or use a variable assigned a literal path or `$(mktemp -d)` earlier in the same command; any other variable or command substitution is denied.",
   "- Put scratch files in a `mktemp -d` dir, $CLAUDE_JOB_DIR/tmp or <repo>/tmp/; those, and paths below a build or cache dir, may be deleted.",
   "- Text handed to an interpreter or database client (a shell, a remote shell, an SQL client, an inline script) is scanned like a command, so a statement that drops or empties a table, or a recursive delete, inside that text is denied. Write such text to a file with a plain cat heredoc first; that body is not scanned.",
@@ -127,7 +127,7 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
     if (liveFile) return logGuard(env, config, input, "live", liveFile, now), liveFile;
     if (config.mode === "off") return null;
     const verdict = (deps.decide || decide)(input, { sessionRoot, env, config });
-    const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
+    const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile });
     if (config.logDecisions && verdict.action === "cross") logDecision(env, input, verdict, out, now);
     return out;
   } catch (e) {
@@ -154,7 +154,7 @@ function bashHook(input, env, deps, now) {
   const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : sessionRoot;
   const home = env.HOME || env.USERPROFILE || "";
   const config = loadConfig({ env, sessionRoot });
-  const danger = dangerCheck(command, { env, config, sessionRoot, home, cwd });
+  const danger = dangerCheck(command, input, { env, config, sessionRoot, home, cwd, now });
   if (danger) return logGuard(env, config, input, "danger", danger, now), danger;
   const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
   if (live && live.hookSpecificOutput?.permissionDecision === "deny") return logGuard(env, config, input, "live", live, now), live;
@@ -167,7 +167,7 @@ function bashHook(input, env, deps, now) {
   if (!writes.length && !worktree) return null;
   if (config.mode === "off") return null;
   if (worktree && config.worktreeGuard) {
-    const out = renderWorktree(judgeWorktreeAdds(command, { cwd, home, git }), { mode: config.mode, input, warnings: config.warnings });
+    const out = renderWorktree(judgeWorktreeAdds(command, { cwd, home, git }), { mode: config.mode, input, warnings: config.warnings, profile: config.profile });
     if (out) return out;
   }
   if (!config.bashGuard) return null;
@@ -175,7 +175,7 @@ function bashHook(input, env, deps, now) {
     const verdict = judgeTarget((deps.decide || decide), { ...input, tool_name: "Bash" }, w.target, w.isDir, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: w.target, via: w.how };
-    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile });
     if (config.logDecisions) logDecision(env, input, shown, out, now);
     if (out) return out;
   }
@@ -192,10 +192,10 @@ function escapeOpen(env, config, sessionRoot) {
   return { open: false, warnings };
 }
 
-function dangerCheck(command, { env, config, sessionRoot, home, cwd = "" }) {
+function dangerCheck(command, input, { env, config, sessionRoot, home, cwd = "", now }) {
   if (!config.dangerGuard) return null;
   const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd });
-  return dangerOut(reason, { env, config, sessionRoot });
+  return dangerOut(reason, { env, config, sessionRoot, input, now });
 }
 
 function dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd = "", git }) {
@@ -204,7 +204,7 @@ function dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd = 
   if (!reason) return null;
   const escape = escapeOpen(env, config, sessionRoot);
   if (escape.open) return null;
-  return renderDangerAsk(reason, { input, escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings] });
+  return renderDangerAsk(reason, { input, escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings], profile: config.profile, now: Date.now(), markerDir: markerDirFor(env), bypassStrict: config.bypassStrict });
 }
 
 function tagWriteCheck(paths, { env, config, sessionRoot }) {
@@ -212,17 +212,17 @@ function tagWriteCheck(paths, { env, config, sessionRoot }) {
   return dangerOut(TAG_WRITE_REASON, { env, config, sessionRoot });
 }
 
-function dangerOut(reason, { env, config, sessionRoot }) {
+function dangerOut(reason, { env, config, sessionRoot, input = null, now = Date.now() }) {
   if (!reason) return null;
   const escape = escapeOpen(env, config, sessionRoot);
   if (escape.open) return null;
-  return renderDanger(reason, { escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings] });
+  return renderDanger(reason, { input, escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings], profile: config.profile, now, markerDir: markerDirFor(env), bypassStrict: config.bypassStrict });
 }
 
 function liveRender(finding, input, { env, config, sessionRoot, now }) {
   const escape = escapeOpen(env, config, sessionRoot);
   if (escape.open) return null;
-  return renderLive(finding, { input, now, markerDir: markerDirFor(env), warnings: [...config.warnings, ...escape.warnings], bypassStrict: config.bypassStrict, escapeName: config.allowDangerEnv || ESCAPE_ENV });
+  return renderLive(finding, { input, now, markerDir: markerDirFor(env), warnings: [...config.warnings, ...escape.warnings], bypassStrict: config.bypassStrict, escapeName: config.allowDangerEnv || ESCAPE_ENV, profile: config.profile });
 }
 
 function liveCommandCheck(command, input, ctx) {
@@ -275,7 +275,7 @@ function mcpHook(input, env, deps, now) {
     const verdict = judgeTarget((deps.decide || decide), input, t.path, t.isDir, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: t.path };
-    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict });
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile });
     if (config.logDecisions) logDecision(env, input, shown, out, now);
     if (out) return out;
   }

@@ -399,9 +399,11 @@ function heredocSinkOnly(line, m) {
   return outerCut < 0 && leadingBin(outer) === "git";
 }
 
+const GROUP_OPENERS = new Set(["{", "(", "!", "then", "do", "else"]);
+
 function leadingBin(text) {
   let toks = fields(text);
-  while (toks.length && (isAssignment(toks[0]) || toks[0] === "sudo")) toks = toks.slice(1);
+  while (toks.length && (isAssignment(toks[0]) || toks[0] === "sudo" || GROUP_OPENERS.has(toks[0]))) toks = toks.slice(1);
   return toks.length ? baseName(toks[0]) : "";
 }
 
@@ -489,6 +491,8 @@ function segmentCwds(segments, cwd, home) {
   return out;
 }
 
+const reRedirectWord = /^(?:\d*|&)(?:>>?|<<?|>&|<&)(?:&?\d+|-)?/;
+
 function gitInvocation(sub) {
   const { words, ok } = shellWords(sub);
   if (!ok) return { unparsed: true };
@@ -507,7 +511,16 @@ function gitInvocation(sub) {
     else if (!v.startsWith("-")) break;
   }
   g.sub = words[i]?.value ?? "";
-  g.args = words.slice(i + 1).map((w) => w.value);
+  g.args = [];
+  for (let j = i + 1; j < words.length; j++) {
+    const raw = words[j].raw;
+    const m = reRedirectWord.exec(raw);
+    if (!m) {
+      g.args.push(words[j].value);
+      continue;
+    }
+    if (m[0] === raw && !/&\d$/.test(raw) && !raw.endsWith("-")) j++;
+  }
   return g;
 }
 
@@ -662,6 +675,20 @@ function tagRedirect(sub) {
     if (reTagMention.test(target) || target.includes("$") || target.includes("`")) return true;
   }
   return false;
+}
+
+const UNCERTAIN_DANGER = [
+  /^recursive rm of .* is denied: the target is a shell variable the guard cannot resolve/,
+  /^recursive rm of absolute path /,
+  /^recursive rm through `xargs`/,
+  /^recursive rm of .* the guard cannot parse its quoting/,
+  /the guard could not check what it would delete/,
+  /could not be parsed \(unbalanced quoting\)/,
+];
+
+export function isUncertainDanger(reason) {
+  if (typeof reason !== "string" || reason === "") return false;
+  return reason.includes(HEREDOC_NOTE) || UNCERTAIN_DANGER.some((re) => re.test(reason));
 }
 
 const HEREDOC_NOTE = " The match is in a heredoc body fed to an interpreter; if that text is data written into a file, write the file with a plain cat heredoc first.";

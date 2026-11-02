@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
 import { ALLOWED_DIRS_SHOWN, NAME, REPO_CONFIG_FILE, RETRY_WINDOW_MS } from "./constants.mjs";
+import { isUncertainDanger } from "./dangerguard.mjs";
 
 const pluginName = NAME;
 const repoConfigFile = REPO_CONFIG_FILE;
@@ -9,6 +10,12 @@ const retryMinutes = RETRY_WINDOW_MS / 60000;
 
 const ALWAYS_ASK = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected", "invalid-path", "unresolvable"]);
 export const GUARDED_FILE_WHYS = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected"]);
+
+const isBypass = (input) => input?.permission_mode === "bypassPermissions";
+
+export function defersToAuto(profile, input) {
+  return profile !== "strict" && input?.permission_mode === "auto";
+}
 
 function decision(permissionDecision, reason) {
   return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision, permissionDecisionReason: reason } };
@@ -131,9 +138,10 @@ function askOrDeny(input, reason) {
   return decision("ask", reason);
 }
 
-export function render(v, { mode, input, now = Date.now(), markerDir, warnings = [], bypassStrict = false } = {}) {
+export function render(v, { mode, input, now = Date.now(), markerDir, warnings = [], bypassStrict = false, profile = "assist" } = {}) {
   if (!v || v.action !== "cross" || mode === "off") return null;
   if (ALWAYS_ASK.has(v.why)) return askOrDeny(input, withWarnings(alwaysAskReason(v), warnings));
+  if (mode === "ask" && defersToAuto(profile, input)) return null;
   switch (mode) {
     case "warn":
       return { systemMessage: withWarnings(`${pluginName} (warn mode): a write to \`${v.target}\` is ${scopeText(v)}. It was not blocked.`, warnings) };
@@ -149,11 +157,25 @@ export function dangerDenyReason(reason, escapeName) {
   return `${pluginName}: ${reason} ${pluginName} denies this in every permission mode. Hand the exact command to the user to run themselves, or the user starts the session with ${escapeName}=1.`;
 }
 
-export function renderDanger(reason, { escapeName, warnings = [] } = {}) {
+function renderUncertain(reason, { input, escapeName, warnings, now, markerDir, bypassStrict, key }) {
+  if (defersToAuto("assist", input)) return null;
+  if (!isBypass(input)) return decision("ask", withWarnings(`${pluginName}: ${reason} ${pluginName} could not prove this loses data, so it asks instead of denying. Approve only if you expected it.`, warnings));
+  if (bypassStrict) return decision("deny", withWarnings(dangerDenyReason(reason, escapeName), warnings));
+  if (!firstTry(`danger\u0000${key}`, { input, now, markerDir })) return null;
+  return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${reason} ${pluginName} could not prove this loses data. Check the target first (print the variable, or write the literal path); retry the same command only if it is what you meant. (${pluginName} deny-once under bypassPermissions: the same command retried within ${retryMinutes} minutes passes; the bypass_strict option or profile strict keeps it denied.)`, warnings));
+}
+
+function uncertainKey(input) {
+  return `${input?.cwd ?? ""}\u0000${input?.tool_input?.command ?? ""}`;
+}
+
+export function renderDanger(reason, { input, escapeName, warnings = [], profile = "assist", now = Date.now(), markerDir, bypassStrict = false } = {}) {
+  if (profile !== "strict" && isUncertainDanger(reason)) return renderUncertain(reason, { input, escapeName, warnings, now, markerDir, bypassStrict, key: uncertainKey(input) });
   return decision("deny", withWarnings(dangerDenyReason(reason, escapeName), warnings));
 }
 
-export function renderDangerAsk(reason, { input, escapeName, warnings = [] } = {}) {
+export function renderDangerAsk(reason, { input, escapeName, warnings = [], profile = "assist", now = Date.now(), markerDir, bypassStrict = false } = {}) {
+  if (profile !== "strict" && isUncertainDanger(reason)) return renderUncertain(reason, { input, escapeName, warnings, now, markerDir, bypassStrict, key: uncertainKey(input) });
   if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${pluginName}: ${reason} This session runs with bypassPermissions, where no prompt reaches the user, so danger_guard denies it. Take the safer route named above, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
   return decision("ask", withWarnings(`${pluginName}: ${reason}`, warnings));
 }
@@ -173,15 +195,17 @@ export function worktreeReason(v) {
   return `${pluginName}: this command runs \`git worktree add\` for \`${v.target}\`, outside \`${v.worktreesDir}\`. A worktree elsewhere (a /tmp folder above all) is easy to lose: the folder goes away and a stale worktree record stays behind. Prefer the Agent tool's isolation "worktree" or EnterWorktree, which place worktrees under \`${v.worktreesDir}\`, or stay in this checkout and use a scratch directory. Approve only if you want a worktree at that path.`;
 }
 
-export function renderWorktree(v, { mode, input, warnings = [] } = {}) {
+export function renderWorktree(v, { mode, input, warnings = [], profile = "assist" } = {}) {
   if (!v || v.action !== "cross" || mode === "off") return null;
+  if (mode === "ask" && defersToAuto(profile, input)) return null;
   const reason = withWarnings(worktreeReason(v), warnings);
   if (mode === "warn") return { systemMessage: `${pluginName} (warn mode): ${reason}` };
   return askOrDeny(input, reason);
 }
 
-export function renderLive(f, { input, now = Date.now(), markerDir, warnings = [], bypassStrict = false, escapeName } = {}) {
+export function renderLive(f, { input, now = Date.now(), markerDir, warnings = [], bypassStrict = false, escapeName, profile = "assist" } = {}) {
   if (!f) return null;
+  if (f.level !== "deny" && defersToAuto(profile, input)) return null;
   if (f.level === "deny") {
     return decision("deny", withWarnings(`${pluginName}: ${f.reason} live_guard denies this in every permission mode, because it disrupts the user's running machine beyond this session's own work. Stop only a process this session started, by its PID, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
   }

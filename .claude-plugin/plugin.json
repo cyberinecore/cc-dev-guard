@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, and asks before or denies commands that disrupt the user's running machine (pkill by name, tmux sessions it did not create, system settings, launch agents, repeated app relaunches), plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
@@ -23,10 +23,16 @@
     "permissions"
   ],
   "userConfig": {
+    "profile": {
+      "type": "string",
+      "title": "Profile",
+      "description": "assist (default) or strict. assist: a command the guard cannot prove destroys data (a recursive rm of a variable or of a specific absolute path, a delete it could not check, a match inside a heredoc fed to an interpreter) asks in default mode, is left to Claude Code's auto-mode classifier in auto mode, and is denied once under bypassPermissions (the same command retried within 10 minutes passes); in auto mode a write to another repository and a live_guard ask are also left to the classifier. Proven data loss (git reset --hard, DROP TABLE, docker volume prune, unpushed commits, uncommitted files in a worktree) is denied in every mode either way. strict: the behaviour of 0.15.0 and earlier, every danger_guard match denied in every mode. A repository file may set strict, never assist.",
+      "default": "assist"
+    },
     "mode": {
       "type": "string",
       "title": "Mode",
-      "description": "One of ask, deny-once, warn, off. ask: ask before a write outside the session's scope (default). deny-once: deny the first such write per session and repository, allow a retry for 10 minutes. warn: never block, show a notice. off: do nothing. Any other value falls back to ask with a warning.",
+      "description": "One of ask, deny-once, warn, off. ask: ask before a write outside the session's scope (default). deny-once: deny the first such write per session and repository, allow a retry for 10 minutes. warn: never block, show a notice. off: do nothing. Any other value falls back to ask with a warning. mode covers writes to another repository only; danger_guard and live_guard have their own switches and the profile option.",
       "default": "ask"
     },
     "extra_allowed_dirs": {
@@ -88,7 +94,7 @@
     "danger_guard": {
       "type": "boolean",
       "title": "Deny data-destroying Bash commands",
-      "description": "Deny, in every permission mode including bypassPermissions, Bash commands that destroy data or rewrite shared history: recursive rm outside temp, worktree and build folders, git reset --hard, git checkout -- ., git restore ., git clean -f, a force-push to a protected branch or with no branch named, terraform destroy, kubectl delete of a namespace, volume or --all, docker system prune, docker volume rm/prune, docker compose down -v, DROP DATABASE/SCHEMA/TABLE and TRUNCATE. Also inside ssh, bash -c and other wrappers. Start a session with CY_ALLOW_DANGER=1 to lift it for that session.",
+      "description": "Deny Bash commands that destroy data or rewrite shared history (under profile assist, a match the guard cannot prove asks instead, see profile): recursive rm outside temp, worktree and build folders, git reset --hard, git checkout -- ., git restore ., git clean -f, a force-push to a protected branch or with no branch named, terraform destroy, kubectl delete of a namespace, volume or --all, docker system prune, docker volume rm/prune, docker compose down -v, DROP DATABASE/SCHEMA/TABLE and TRUNCATE. Also inside ssh, bash -c and other wrappers. Start a session with CY_ALLOW_DANGER=1 to lift it for that session.",
       "default": true
     },
     "session_hint": {
