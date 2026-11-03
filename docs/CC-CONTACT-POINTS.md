@@ -7,6 +7,7 @@ Every place where this plugin depends on Claude Code behaviour. `cc-plugin-compa
 | hooks.json shape: top-level `"hooks"` wrapper | hooks/hooks.json, plugins/cyberine-worktree/hooks/hooks.json | | the plugin's hooks stop loading |
 | Exec form `command: "node"` + `args`, `timeout` | both hooks.json | 2.1.139 | the hook fails to spawn |
 | `${CLAUDE_PLUGIN_ROOT}` substitution inside `args` | both hooks.json | 2.1.139 | the script is not found; the engine never runs |
+| `UserPromptSubmit` input `prompt` and `prompt_id`, and the same `prompt_id` on every `PreToolUse` of that turn (D54) | scripts/lib/prompts.mjs, hooks/hooks.json, docs/LIVE-MATRIX.md D54 rows | 2.1.317 (measured) | a settings edit the user named is denied once instead of passing; nothing is let through that would not be |
 | `CLAUDE_PLUGIN_DATA` env (records of /add-dir, deny-once state) | scripts/lib/sources.mjs, scripts/lib/output.mjs | | records lost; deny-once and /add-dir allowances break |
 | PreToolUse matcher `Write\|Edit\|NotebookEdit` (regex alternation, exact names) | hooks/hooks.json | | file writes go unguarded |
 | PreToolUse matcher `Bash` | hooks/hooks.json | | danger_guard, bash_guard and worktree_guard stop firing |

@@ -10,6 +10,7 @@ const retryMinutes = RETRY_WINDOW_MS / 60000;
 
 const ALWAYS_ASK = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected", "invalid-path", "unresolvable"]);
 export const GUARDED_FILE_WHYS = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected"]);
+const ALWAYS_ASK_FILES = new Set(["config-file", "settings-file", "transcript", "devguard-data"]);
 
 const isBypass = (input) => input?.permission_mode === "bypassPermissions";
 
@@ -39,21 +40,27 @@ function withWarnings(text, warnings) {
   return warnings && warnings.length ? `${text} Config warnings: ${warnings.join("; ")}.` : text;
 }
 
-function alwaysAskReason(v) {
+function alwaysAskWhat(v) {
   switch (v.why) {
     case "config-file":
-      return `${pluginName}: \`${v.target}\` is a ${pluginName} configuration file, and a change there changes what this guard allows. Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\`${via(v)} is a ${pluginName} configuration file, and a change there changes what this guard allows.`;
     case "settings-file":
-      return `${pluginName}: \`${v.target}\` is a Claude Code settings file, and a change there can widen what this session may write (additionalDirectories, env, hooks). Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\`${via(v)} is a Claude Code settings file, and a change there can widen what later sessions may do (hooks, permissions, additionalDirectories, env).`;
     case "transcript":
-      return `${pluginName}: \`${v.target}\` is a Claude Code session transcript, which ${pluginName} reads to learn the session's allowed directories. Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\`${via(v)} is a Claude Code session transcript, which ${pluginName} reads to learn the session's allowed directories.`;
     case "devguard-data":
-      return `${pluginName}: \`${v.target}\` is inside ${pluginName}'s own data directory, which records the directories this session added. Approve only if you asked for this change.`;
+      return `${pluginName}: \`${v.target}\`${via(v)} is inside ${pluginName}'s own data directory, which records the directories this session added.`;
     case "protected":
-      return `${pluginName}: \`${v.target}\` is under a path this repository protects in .claude/${repoConfigFile}. Approve only if you meant to change it.`;
+      return `${pluginName}: \`${v.target}\`${via(v)} is under a path this repository protects in .claude/${repoConfigFile}.`;
     default:
-      return `${pluginName}: could not resolve the path \`${v.target}\`, so it could not check whether this write stays inside the session's scope. Approve only if you expected this write.`;
+      return `${pluginName}: could not resolve the path \`${v.target}\`, so it could not check whether this write stays inside the session's scope.`;
   }
+}
+
+function alwaysAskApprove(v) {
+  if (v.why === "protected") return "Approve only if you meant to change it.";
+  if (ALWAYS_ASK_FILES.has(v.why)) return "Approve only if you asked for this change.";
+  return "Approve only if you expected this write.";
 }
 
 function insideWorkingDir(v) {
@@ -129,18 +136,31 @@ function denyOnce(v, { input, now, markerDir, warnings, note = "" }) {
   return decision("deny", withWarnings(note ? `${denyReason(v)} ${note}` : denyReason(v), warnings));
 }
 
-const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. Follow the fix named above, or let the user make the change.`;
+const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. Hand the exact change to the user to run themselves (a \`!\` command in the prompt), or the user makes it in a session without bypassPermissions, where this asks.`;
+
+const settingsOnceNote = `The user's current prompt names neither this file nor a key the change sets. Retry the identical change within ${retryMinutes} minutes only if the user asked for it in this conversation; otherwise report it to the user instead. (${pluginName} deny-once for settings files under bypassPermissions; profile strict or the bypass_strict option keeps it denied.)`;
 
 const bypassOnceNote = `This session runs with bypassPermissions, where no prompt reaches the user, so ${pluginName} holds the first write to that repository and lets a retry through; the user can turn on the bypass_strict option to keep every such write denied.`;
 
-function askOrDeny(input, reason) {
-  if (input?.permission_mode === "bypassPermissions") return decision("deny", `${reason} ${bypassNote}`);
-  return decision("ask", reason);
+function askOrDeny(input, what, approve, warnings = []) {
+  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${what} ${bypassNote}`, warnings));
+  return decision("ask", withWarnings(approve ? `${what} ${approve}` : what, warnings));
 }
 
-export function render(v, { mode, input, now = Date.now(), markerDir, warnings = [], bypassStrict = false, profile = "assist" } = {}) {
+function settingsKey(v, input) {
+  return `settings\u0000${v.resolved || v.target}\u0000${createHash("sha1").update(JSON.stringify(input?.tool_input ?? null)).digest("hex")}`;
+}
+
+function renderSettingsBypass(v, { input, now, markerDir, warnings, promptNamed }) {
+  if (promptNamed) return null;
+  if (!firstTry(settingsKey(v, input), { input, now, markerDir })) return null;
+  return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${settingsOnceNote}`, warnings));
+}
+
+export function render(v, { mode, input, now = Date.now(), markerDir, warnings = [], bypassStrict = false, profile = "assist", promptNamed = false } = {}) {
   if (!v || v.action !== "cross" || mode === "off") return null;
-  if (ALWAYS_ASK.has(v.why)) return askOrDeny(input, withWarnings(alwaysAskReason(v), warnings));
+  if (v.why === "settings-file" && isBypass(input) && profile !== "strict" && !bypassStrict) return renderSettingsBypass(v, { input, now, markerDir, warnings, promptNamed });
+  if (ALWAYS_ASK.has(v.why)) return askOrDeny(input, alwaysAskWhat(v), alwaysAskApprove(v), warnings);
   if (mode === "ask" && defersToAuto(profile, input)) return null;
   switch (mode) {
     case "warn":
@@ -149,7 +169,7 @@ export function render(v, { mode, input, now = Date.now(), markerDir, warnings =
       return denyOnce(v, { input, now, markerDir, warnings });
     default:
       if (input?.permission_mode === "bypassPermissions" && !bypassStrict) return denyOnce(v, { input, now, markerDir, warnings, note: bypassOnceNote });
-      return askOrDeny(input, withWarnings(askReason(v), warnings));
+      return askOrDeny(input, askReason(v), "", warnings);
   }
 }
 
@@ -182,7 +202,7 @@ export function renderDangerAsk(reason, { input, escapeName, warnings = [], prof
 
 export function renderError(error, input) {
   const msg = error && error.message ? error.message : String(error);
-  return askOrDeny(input, `${pluginName} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope. Approve only if you expected this write.`);
+  return askOrDeny(input, `${pluginName} could not check this write (${msg}), so it cannot tell whether the write stays inside the session's scope.`, "Approve only if you expected this write.");
 }
 
 export function worktreeReason(v) {

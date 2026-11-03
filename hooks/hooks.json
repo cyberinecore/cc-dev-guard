@@ -73,6 +73,21 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs",
+              "prompt-submit"
+            ],
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

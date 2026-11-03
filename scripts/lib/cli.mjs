@@ -20,11 +20,13 @@ import { mcpWriteTargets } from "./mcpfs.mjs";
 import { GUARDED_FILE_WHYS, render, renderDanger, renderDangerAsk, renderError, renderLive, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
+import { promptNames, prunePromptRecords, recordPrompt } from "./prompts.mjs";
 
 const usage = `usage: ${pluginName} <command>
 
   hook                      read a PreToolUse event on stdin and print a decision (used by hooks/hooks.json)
   directory-added           record a DirectoryAdded event for this session (used by hooks/hooks.json)
+  prompt-submit             record hashed words of the user's prompt under bypassPermissions (used by hooks/hooks.json)
   session-start             warn when node is too old and prune old session records (used by hooks/hooks.json)
   explain <path> [options]  show the verdict for a write to <path>
   status [options]          show the session repository, allowed directories and configuration
@@ -127,7 +129,7 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
     if (liveFile) return logGuard(env, config, input, "live", liveFile, now), liveFile;
     if (config.mode === "off") return null;
     const verdict = (deps.decide || decide)(input, { sessionRoot, env, config });
-    const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile });
+    const out = render(verdict, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile, promptNamed: namedByPrompt(verdict, input, env) });
     if (config.logDecisions && verdict.action === "cross") logDecision(env, input, verdict, out, now);
     return out;
   } catch (e) {
@@ -136,6 +138,15 @@ export function runHook({ raw, env = namedEnv(process.env), deps = {}, now = Dat
       logGuard(env, loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, input?.cwd) }), input, "error", out, now);
     } catch {}
     return out;
+  }
+}
+
+function namedByPrompt(verdict, input, env) {
+  if (verdict?.why !== "settings-file" || input?.permission_mode !== "bypassPermissions") return false;
+  try {
+    return promptNames(input, env, verdict.resolved || verdict.target);
+  } catch {
+    return false;
   }
 }
 
@@ -175,7 +186,7 @@ function bashHook(input, env, deps, now) {
     const verdict = judgeTarget((deps.decide || decide), { ...input, tool_name: "Bash" }, w.target, w.isDir, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: w.target, via: w.how };
-    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile });
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile, promptNamed: namedByPrompt(shown, input, env) });
     if (config.logDecisions) logDecision(env, input, shown, out, now);
     if (out) return out;
   }
@@ -275,7 +286,7 @@ function mcpHook(input, env, deps, now) {
     const verdict = judgeTarget((deps.decide || decide), input, t.path, t.isDir, { sessionRoot, env, config, deps: { git } });
     if (verdict.action !== "cross") continue;
     const shown = { ...verdict, target: t.path };
-    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile });
+    const out = render(shown, { mode: config.mode, input, now, markerDir: markerDirFor(env), warnings: config.warnings, bypassStrict: config.bypassStrict, profile: config.profile, promptNamed: namedByPrompt(shown, input, env) });
     if (config.logDecisions) logDecision(env, input, shown, out, now);
     if (out) return out;
   }
@@ -400,9 +411,17 @@ export async function main(argv, { env = namedEnv(process.env), stdout = process
       } catch {}
       return 0;
     }
+    if (cmd === "prompt-submit") {
+      try {
+        const input = JSON.parse(readFileSync(0, "utf8"));
+        recordPrompt(input, env, loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, input?.cwd) }));
+      } catch {}
+      return 0;
+    }
     if (cmd === "session-start") {
       try {
         pruneSessionRecords(env);
+        prunePromptRecords(env);
       } catch {}
       let config = null;
       try {

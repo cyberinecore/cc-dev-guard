@@ -14,18 +14,19 @@ Guidance for Claude Code working in this repository.
 
 ## Layout
 
-- `scripts/devguard.mjs`: entry, subcommands `hook`, `directory-added`, `session-start`, `explain`, `status`, `worktrees`. It only imports the engine, so an engine that fails to load still answers ask.
+- `scripts/devguard.mjs`: entry, subcommands `hook`, `directory-added`, `prompt-submit`, `session-start`, `explain`, `status`, `worktrees`. It only imports the engine, so an engine that fails to load still answers ask.
 - `scripts/lib/`: `decide.mjs` (pure decision), `transcript.mjs` (bounded tail reader), `config.mjs` (userConfig plus tightening-only repo file), `git.mjs` (git without a shell), `allowances.mjs` (Claude Code's own folders), `sources.mjs` (allowed dirs from settings, `/add-dir` records and `--add-dir`; the transcript is opt-in), `paths.mjs`, `output.mjs` (mode to hook JSON; under bypassPermissions a cross-repo write is deny-once and every other ask is deny), `constants.mjs`.
 - `scripts/lib/dangerguard.mjs` (data-destroying Bash commands, denied in every mode, D34; a port of the Go `bash-guard`, cases in `tests/fixtures/bashguard-cases.mjs` at tag `cyberine-devguard--v0.13.1`), `scripts/lib/cachedir.mjs` (the `CACHEDIR.TAG` probe danger_guard uses to let a tagged cache directory be deleted, D41).
+- `scripts/lib/prompts.mjs` (hashed words of the latest user prompt under bypassPermissions, matched against a settings-file write, D54).
 - `scripts/lib/bashguard.mjs` (Bash parsing: `git worktree add` D25, obvious write shapes D28), `scripts/lib/mcpfs.mjs` (filesystem MCP schemas, D29), `scripts/lib/worktrees.mjs` (the report-only `worktrees` command, D27).
 - `plugins/cyberine-worktree/`: the second, self-contained plugin (WorktreeCreate hook, D26). It may import only node builtins; it has its own version.
-- `hooks/hooks.json`: exec-form `node ${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs hook`, matchers `Write|Edit|NotebookEdit`, `Bash` and the filesystem MCP write tools, plus SessionStart `session-start` (surfaces a missing or old node, prunes records) and DirectoryAdded `directory-added` (records `/add-dir` per session).
+- `hooks/hooks.json`: exec-form `node ${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs hook`, matchers `Write|Edit|NotebookEdit`, `Bash` and the filesystem MCP write tools, plus UserPromptSubmit `prompt-submit` (D54), SessionStart `session-start` (surfaces a missing or old node, prunes records) and DirectoryAdded `directory-added` (records `/add-dir` per session).
 - `docs/`: `DECISIONS.md`, `LIVE-MATRIX.md`, `FAILURE-MODES.md`, `SECURITY-REVIEW.md`, `PARITY.md`. README claims trace to these or to tests.
 
 ## Constraints
 
 - Zero dependencies, Node >= 18, readable ESM, every file under 256 KiB (directory rule). No top-level `bin/`, no lockfile, no binaries.
-- The hook never emits `allow`; same-repo and allowed writes emit nothing. Internal errors emit `ask`. Under bypassPermissions, where Claude Code lets some asks through (measured, `docs/LIVE-MATRIX.md`), a cross-repository or other-worktree write in `ask` mode is deny-once: the first write per session and repository is denied and a retry within 10 minutes passes (D35; `bypass_strict` keeps it denied). Every other ask there is sent as deny: guard and settings files, transcripts, `protect` paths, misplaced worktrees and internal errors. danger_guard denies in every mode (D34).
+- The hook never emits `allow`; same-repo and allowed writes emit nothing. Internal errors emit `ask`. Under bypassPermissions, where Claude Code lets some asks through (measured, `docs/LIVE-MATRIX.md`), a cross-repository or other-worktree write in `ask` mode is deny-once: the first write per session and repository is denied and a retry within 10 minutes passes (D35; `bypass_strict` keeps it denied). A settings-file write there passes when the same turn's user prompt names the file or key and is otherwise deny-once (D54, `assist` only). Every other ask there is sent as deny: guard files, transcripts, `protect` paths, misplaced worktrees and internal errors. danger_guard denies in every mode (D34).
 - Every git call goes through `scripts/lib/git.mjs` (no shell, `GIT_*` stripped, fsmonitor off).
 - Never read the session transcript unless `read_transcript` is on (directory policy: no reading chat history).
 - `.claude/cyberine-devguard.json` may only tighten. Never add a code path that lets a repository widen its own scope.
