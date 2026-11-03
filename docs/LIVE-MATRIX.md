@@ -126,3 +126,15 @@ Confirmed with this plugin the same day in an interactive tmux session (`--plugi
 | variable visible to a hook | a command hook run by `claude -p` with the variable set in its environment | - | `unset` in the hook environment, while the hook still gets `CLAUDE_PID`; `ps eww -p $CLAUDE_PID` shows the variable in the Claude Code process environment |
 
 So `danger_guard` denies the recursive rm with the variable set, the same as without it. Claude Code 2.1.312 does not hand this variable to hook processes, so the notice appears only when the variable reaches the hook some other way; the README Limits line says so. Reading the variable from the Claude Code process environment through `CLAUDE_PID` would work (the probe above), but it exposes the whole environment to the hook process and is not done.
+
+## Profile `assist` in auto mode rows
+
+2.1.317 (Claude Code), model sonnet, 2026-11-03, headless `claude -p`, `--permission-mode auto`, `--setting-sources project`, `--plugin-dir` at 0.16.0 (`fe771c6`). The session ran in a throwaway git repository `a` inside `mktemp -d "$HOME/.dgprobe.XXXXXX"`, next to a second repository `b` and a directory `fx/data` holding one file; each row was its own run and asked for exactly one tool call. The `pkill` target was a `sleep 600` started by the probe under a unique `exec -a` name, so nothing else could match. The hook column is the hook's own output for the same tool input fed to `scripts/devguard.mjs hook`, with `permission_mode` `auto` and then `default`.
+
+| row | command | hook in auto | hook in default | observed in auto mode |
+|---|---|---|---|---|
+| uncertain rm | `rm -rf <tmp>/fx/data` (specific absolute path) | nothing | ask (`recursive rm of absolute path`) | the command ran, `fx/data` was gone, no permission denial |
+| pattern kill | `pkill -f <nonce>` | nothing | ask (`stops processes by name or pattern`) | the command ran, the probe's `sleep` was stopped, no permission denial |
+| cross-repo write | Write `<tmp>/b/note.txt` from a session in `a` | nothing | ask (`is in another repository`) | the file was written, no permission denial |
+
+So under `assist` the hook stays silent in auto mode for all three, as D53 intends, and the auto-mode classifier allowed each call: the result's `permission_denials` was empty and no prompt reached a user. The classifier's own verdict is inferred from the outcome; the stream does not report it. In this run auto mode alone did not stop a recursive rm of a specific home-directory path, a pattern kill or a cross-repository write that the user asked for explicitly; `profile: "strict"` keeps the 0.15.0 behaviour for a user who wants devguard to hold those itself.
