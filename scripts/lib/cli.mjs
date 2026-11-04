@@ -93,7 +93,7 @@ function logGuard(env, config, input, guard, out, now) {
 export const SESSION_HINT = [
   `${pluginName} denies data-destroying Bash commands; under profile assist a command it cannot prove destructive (a variable target, a specific absolute path) asks, is left to auto mode, or is denied once under bypassPermissions. A command that is really needed and still denied goes to the user to run. To avoid a stop:`,
   "- Recursive rm: write the full target path literally, or use a variable assigned a literal path or `$(mktemp -d)` earlier in the same command; any other variable or command substitution is denied.",
-  "- Put scratch files in a `mktemp -d` dir, $CLAUDE_JOB_DIR/tmp or <repo>/tmp/; those, and paths below a build or cache dir, may be deleted.",
+  "- Put scratch files in a `mktemp -d` dir, $CLAUDE_JOB_DIR/tmp or <repo>/tmp/; those, and paths below a build or cache dir, may be deleted. A git worktree is not a scratch file: even a throwaway one goes under the repository's `.claude/worktrees/`; to read an old commit use `git show <rev>:<path>` or `git archive` into a scratch dir instead.",
   "- Text handed to an interpreter or database client (a shell, a remote shell, an SQL client, an inline script) is scanned like a command, so a statement that drops or empties a table, or a recursive delete, inside that text is denied. Write such text to a file with a plain cat heredoc first; that body is not scanned.",
 ].join("\n");
 

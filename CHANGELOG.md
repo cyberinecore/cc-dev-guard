@@ -2,6 +2,22 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.17.1] - 2026-11-04
+
+- `git checkout -- <path>` and `git restore -- <path>` are no longer denied as "discard uncommitted work" when the path only starts with a dot (`.cyberine/accept/x.mjs`). The pathspec is now normalized instead of matched by prefix, so every spelling of the whole tree is denied: `.`, `./`, `./.`, `"."`, `.>/dev/null`, `git checkout HEAD -- .` and `git restore --worktree .` (the last three and the quoted form passed before); `git restore --staged .` still passes.
+- A redirect such as `2>&1`, `>&2` or `&>file` no longer counts as a background `&`, which made `danger_guard` forget a variable assigned `$(mktemp -d)` earlier in the same command and deny the later `rm -rf "$out"`.
+- An option word such as `--out` no longer counts as a reassignment of the variable `out`; inside arithmetic (`((...))`, `let`) a `-` before the name still does, so `((--out))` keeps the variable unresolved.
+- The SessionStart hint says a git worktree, even a throwaway one, goes under the repository's `.claude/worktrees/`, not in a scratch directory.
+
+## [0.17.0] - 2026-11-04
+
+- Under `bypassPermissions` with `profile` `assist`, a write to a Claude Code settings file passes when the prompt you typed in that turn names the file or a key the change sets, and is otherwise denied once (D54). A new `UserPromptSubmit` hook keeps only one-way hashes of the prompt's words, and only in that mode. `strict` and `bypass_strict` keep the hard deny.
+- Hard denies under `bypassPermissions` no longer say "Approve only if" or "Follow the fix named above"; they tell Claude to hand the change to you as a `!` command.
+
+## [0.16.0] - 2026-11-02
+
+- New option `profile`, `assist` by default (D53): a `danger_guard` match the guard cannot prove asks in default mode, is left to the auto-mode classifier, and is denied once under `bypassPermissions`; `strict` keeps the 0.15.0 behaviour.
+
 ## [0.15.0] - 2026-10-31
 
 - `danger_guard` stops four measured false positives (D52, 28 of 71 denials logged 2026-10-27 to 10-30): a worktree whose only ignored files are `*.tsbuildinfo` or a `.build/` folder can be removed with a plain `git worktree remove`; a recursive `rm` of a variable assigned `$(mktemp ...)` earlier in the same command is treated as a temp folder; recursive `rm` of the package-manager and Xcode caches under `$HOME` passes; `.build` joins the regenerable folder names.

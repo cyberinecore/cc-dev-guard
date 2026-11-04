@@ -19,7 +19,38 @@ const reKubectlDelete = /\bkubectl\s+(?:[-\w]+\s+)*?delete\s+(?:[-\w]+\s+)*?(nam
 const reDockerPrune = /\bdocker\s+(system\s+prune|volume\s+(rm|prune))\b/;
 const reComposeDownV = /\bdocker\s+compose\b[^\n;&|]*\bdown\b[^\n;&|]*(\s-v\b|\s--volumes\b)/;
 const reGitResetHard = /\bgit\s+(?:-C\s+\S+\s+)?reset\s+(?:[-\w]+\s+)*?--hard\b/;
-const reGitDiscard = /\bgit\s+(?:-C\s+\S+\s+)?(checkout\s+--\s+\.|checkout\s+\.\s*$|restore\s+\.\s*$|restore\s+(?:--worktree\s+)?--\s+\.)/;
+const reGitDiscardHead = /\bgit\s+(?:-C\s+\S+\s+)?(checkout|restore)(?=\s)/g;
+
+function pathspecWords(rest) {
+  const out = [];
+  for (const raw of rest.split(/\s+/)) {
+    if (raw === "") continue;
+    const cut = raw.search(/[<>;&|)]/);
+    const word = (cut < 0 ? raw : raw.slice(0, cut)).replace(/\\\r?\n?/g, "").replace(/["']/g, "");
+    if (word !== "") out.push(word);
+    if (cut >= 0) break;
+  }
+  return out;
+}
+
+function coversWholeTree(word) {
+  const segs = word.split("/").filter((x) => x !== "" && x !== ".");
+  return segs.length === 0 || segs[0] === "..";
+}
+
+const reGitDiscardLead = /^\s*git\s+(?:-C\s+\S+\s+)?(checkout|restore)(?=\s)/g;
+
+function gitDiscardsAll(s, re = reGitDiscardHead) {
+  for (const m of s.matchAll(re)) {
+    const words = pathspecWords(s.slice(m.index + m[0].length));
+    const dash = words.indexOf("--");
+    const options = dash >= 0 ? words.slice(0, dash) : words.filter((w) => w.startsWith("-"));
+    if (m[1] === "restore" && options.some((w) => w === "--staged" || w === "-S") && !options.some((w) => w === "--worktree" || w === "-W")) continue;
+    const targets = dash >= 0 ? words.slice(dash + 1) : words.filter((w) => !w.startsWith("-")).slice(0, 1);
+    if (targets.some(coversWholeTree)) return true;
+  }
+  return false;
+}
 const reGitClean = /\bgit\s+(?:-C\s+\S+\s+)?clean\s+(?:[-\w]+\s+)*?-[a-zA-Z]*f/;
 const reGitPush = /\bgit\s+(?:-C\s+\S+\s+)?push\b([^\n;&|]*)/g;
 const reForceFlag = /(^|\s)(--force|-f|-[a-eg-zA-Z]*f[a-zA-Z]*)(\s|$)/;
@@ -94,6 +125,10 @@ export function splitSegments(cmd) {
     }
     if (c === "'" || c === '"' || c === "`") {
       q = c;
+      cur += c;
+      continue;
+    }
+    if (c === "&" && (cmd[i - 1] === ">" || cmd[i - 1] === "<" || cmd[i + 1] === ">")) {
       cur += c;
       continue;
     }
@@ -218,7 +253,8 @@ function literalAssignments(text, home) {
 }
 
 function mentionsName(text, name) {
-  return new RegExp(String.raw`(?:^|[^\w\${])${name}(?!\w)`).test(text);
+  const arithmetic = /\(\(|\blet\b/.test(text);
+  return new RegExp(arithmetic ? String.raw`(?:^|[^\w\${])${name}(?!\w)` : String.raw`(?:^|[^\w\${-])${name}(?!\w)`).test(text);
 }
 
 export function assignedVars(segments, home) {
@@ -741,13 +777,13 @@ function heredocBodyLines(cmd) {
   return out;
 }
 
-function subcommandReason(s, opts) {
+function subcommandReason(s, opts, raw = s) {
   if (opts.awsS3 && (reAwsS3Delete.test(s) || reAwsS3ApiDel.test(s))) return "`aws s3 rm/rb` and `aws s3api delete-*` are denied (they delete buckets or objects).";
   if (reSQLDrop.test(s) || reSQLTruncateTable.test(s) || reSQLTruncateLead.test(s) || reSQLTruncateEnd.test(s)) return "DROP DATABASE/SCHEMA/TABLE and TRUNCATE are denied.";
   if (reTerraformDestroy.test(s)) return "`terraform destroy` is denied.";
   if (reKubectlDelete.test(s)) return "`kubectl delete` of a namespace, pv/pvc, statefulset, or --all is denied.";
   if (reDockerPrune.test(s) || reComposeDownV.test(s)) return "`docker system prune`, `docker volume rm/prune` and `docker compose down -v` are denied (they delete volumes).";
-  if (reGitResetHard.test(s) || reGitDiscard.test(s) || reGitClean.test(s)) return "`git reset --hard`, `git checkout -- .`, `git restore .` and `git clean -f` discard uncommitted work; denied.";
+  if (reGitResetHard.test(s) || gitDiscardsAll(s) || gitDiscardsAll(raw, reGitDiscardLead) || reGitClean.test(s)) return "`git reset --hard`, `git checkout -- .`, `git restore .` and `git clean -f` discard uncommitted work; denied.";
   if (reGitStashClear.test(s)) return "`git stash clear` drops every stash entry; denied.";
   if (reDropdb.test(s) || reMysqladminDrop.test(s)) return "`dropdb` and `mysqladmin drop` are denied (they delete a database).";
   if (reRedisFlush.test(s) || reBareFlush.test(s)) return "`redis-cli FLUSHALL`/`FLUSHDB` is denied (it deletes every key).";
