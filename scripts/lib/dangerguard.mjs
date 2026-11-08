@@ -90,7 +90,8 @@ const reTagMention = /cachedir\.tag/i;
 const TAG_WRITE_BINS = new Set(["cp", "mv", "ln", "install", "rsync", "ditto", "tar", "unzip", "dd", "tee", "touch", "curl", "wget", "scp"]);
 const REGENERABLE_DIRS =new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", "target", ".build", "__pycache__", ".pytest_cache", ".mypy_cache", ".venv", "venv", ".parcel-cache", ".vite", ".svelte-kit", "tmp", ".tmp", "temp", ".DS_Store"]);
 const TEXT_TOOLS = new Set(["echo", "printf", "grep", "rg", "egrep", "fgrep", "ugrep", "sed", "awk", "cat", "head", "tail", "less", "more", "wc", "sort", "uniq", "cut", "tr", "diff", "comm", "tee", "jq", "yq", "column", "fold", "nl", "od", "xxd"]);
-const GIT_TEXT_SUBCOMMANDS = new Set(["log", "grep", "show", "diff", "blame"]);
+const TEXT_PREFIX_BINS = new Set(["sudo", "env", "time", "command", "builtin"]);
+const GIT_TEXT_SUBCOMMANDS =new Set(["log", "grep", "show", "diff", "blame"]);
 const WRAPPER_BINS = new Set(["ssh", "bash", "sh", "zsh", "eval", "xargs", "sudo", "nohup", "timeout", "gtimeout", "caffeinate", "env", "script"]);
 const QUOTED_ARG_BINS = new Set(["git", "gh", "glab", "jira", "linear", "curl", "cyberine"]);
 const HEREDOC_SINK_BINS = new Set(["cat", "tee"]);
@@ -309,7 +310,7 @@ export function normalizeTarget(t) {
 
 export function isTextOnly(sub) {
   let toks = fields(sub);
-  while (toks.length && (isAssignment(toks[0]) || toks[0] === "sudo" || toks[0] === "env" || toks[0] === "time")) toks = toks.slice(1);
+  while (toks.length && (isAssignment(toks[0]) || TEXT_PREFIX_BINS.has(toks[0]) || (toks[0] === "-p" && toks.length > 1))) toks = toks.slice(1);
   if (!toks.length) return true;
   const bin = baseName(toks[0]);
   if (TEXT_TOOLS.has(bin)) return true;

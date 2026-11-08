@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.17.2] - 2026-11-08
+
+- A text command led by `command`, `command -p` or `builtin` (`command grep -rn 'docker volume prune' .`) is no longer denied for a destructive phrase inside its pattern; it is read like the same command without the prefix, as `sudo`, `env` and `time` already were (D56). `command docker volume prune`, `builtin eval '...'` and `command bash -c '...'` are still denied.
+
 ## [0.17.1] - 2026-11-04
 
 - `git checkout -- <path>` and `git restore -- <path>` are no longer denied as "discard uncommitted work" when the path only starts with a dot (`.cyberine/accept/x.mjs`). The pathspec is now normalized instead of matched by prefix, so every spelling of the whole tree is denied: `.`, `./`, `./.`, `"."`, `.>/dev/null`, `git checkout HEAD -- .` and `git restore --worktree .` (the last three and the quoted form passed before); `git restore --staged .` still passes.
