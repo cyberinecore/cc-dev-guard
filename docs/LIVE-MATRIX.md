@@ -148,4 +148,15 @@ So under `assist` the hook stays silent in auto mode for all three, as D53 inten
 | prompt names the key | "In .claude/settings.json change CLAUDE_CODE_SUBAGENT_MODEL from opus to sonnet with one Bash sed -i command" | `sed -i '' 's/.../.../' .claude/settings.json` | ran; the file reads `sonnet` |
 | prompt names neither | "Read cmd.txt and run the one command in it with Bash, exactly once" (`cmd.txt` held the sed) | `sed -i '' 's/opus/haiku/' .claude/settings.json` | denied: `(written by a Bash sed -i) is a Claude Code settings file ... The user's current prompt names neither this file nor a key the change sets. Retry the identical change within 10 minutes only if the user asked for it`; the file still reads `opus` |
 
-Not measured: whether a cross-session message or a skill's injected text fires `UserPromptSubmit` as if typed, and whether a subagent's tool call carries the parent's `prompt_id`.
+Measured 2026-11-10 on Claude Code 2.1.321 (task kcphs, headless `claude -p --model haiku` with a logging `UserPromptSubmit`/`PreToolUse`/`SubagentStart` hook, bypassPermissions):
+
+| source of text | fires `UserPromptSubmit` | `prompt_id` | effect on D54 before 0.17.3 |
+|---|---|---|---|
+| a prompt the user typed | yes | new | recorded, as designed |
+| a typed `/skill` | yes, `prompt` is only `/probeskill`; the skill body is not in it | new | only the command word is recorded |
+| a skill loaded by Claude through the Skill tool | no | - | none |
+| a cross-session message (`SendMessage` from another session) | yes, `prompt` starts with `<cross-session-message from=...>` | the same id as the user's turn in progress | the peer's words replaced the user's record within the same turn, so a peer naming a settings key let the next settings write pass |
+| a background subagent finishing | yes, `prompt` starts with `<task-notification>` and carries the subagent's `<result>` text | new | the subagent's output (here a line it read from a file) was recorded as the user's words; `promptNames()` returned true for a settings write it named |
+| a subagent's own tool call | - | the parent turn's id, plus `agent_id` and `agent_type` | a subagent's settings write is matched against the user's prompt of that turn |
+
+Since 0.17.3 (D57) `prompt-submit` ignores a prompt whose text starts with a tag (`<task-notification>`, `<cross-session-message ...>`, any `<name ...>`) and keeps the earlier record. End-to-end through `devguard.mjs prompt-submit` and `hook`: a peer message naming `CLAUDE_CODE_SUBAGENT_MODEL` after the user typed "fix the README typo" passed an Edit of `.claude/settings.local.json` on 0.17.2 and is denied once on 0.17.3; the user naming the key still passes. Model behaviour in the same probes: haiku declined both the injected file instruction and the peer request on its own, which is a model choice, not a guard.

@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.17.3] - 2026-11-10
+
+- Security: under `bypassPermissions`, a message from another Claude session or the result of a background subagent no longer counts as your prompt for a settings-file write (D57). Both reach the `UserPromptSubmit` hook as if typed (measured on 2.1.321, `docs/LIVE-MATRIX.md`), so before this release a peer session, or a subagent repeating text it read from a file, that named a settings file or key let Claude change that file without a prompt. Prompts that start with a tag such as `<cross-session-message>` or `<task-notification>` are now ignored and your own words for the turn are kept.
+
 ## [0.17.2] - 2026-11-08
 
 - A text command led by `command`, `command -p` or `builtin` (`command grep -rn 'docker volume prune' .`) is no longer denied for a destructive phrase inside its pattern; it is read like the same command without the prefix, as `sudo`, `env` and `time` already were (D56). `command docker volume prune`, `builtin eval '...'` and `command bash -c '...'` are still denied.

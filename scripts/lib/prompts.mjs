@@ -40,6 +40,12 @@ export function promptTokens(text) {
   return [...out];
 }
 
+const HARNESS_WRAPPED_PROMPT = /^\s*<[a-z][a-z0-9_-]*[\s>]/i;
+
+export function isHarnessPrompt(prompt) {
+  return typeof prompt === "string" && HARNESS_WRAPPED_PROMPT.test(prompt);
+}
+
 export function shouldRecord(input, config) {
   return input?.permission_mode === "bypassPermissions" && config?.profile !== "strict" && !config?.bypassStrict;
 }
@@ -47,6 +53,7 @@ export function shouldRecord(input, config) {
 export function recordPrompt(input, env, config, now = Date.now()) {
   const p = recordPath(env, input?.session_id);
   if (!p) return false;
+  if (isHarnessPrompt(input?.prompt)) return false;
   if (!shouldRecord(input, config) || typeof input?.prompt !== "string" || typeof input?.prompt_id !== "string" || input.prompt_id === "") {
     rmSync(p, { force: true });
     return false;
