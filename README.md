@@ -129,7 +129,7 @@ Write tools of the reference filesystem MCP server (`@modelcontextprotocol/serve
 | `assist`: a write to a Claude Code settings file | ask | ask | passes when the prompt you typed in this turn names the file (`settings.json`) or a key the change sets; otherwise denied once, and the identical change retried within 10 minutes passes |
 | `strict`: everything above | as 0.15.0: deny or ask | as 0.15.0 | as 0.15.0 (settings files: denied on every try) |
 
-In auto mode a hook `ask` is not handed to the classifier: Claude Code asks you directly, so `assist` emits nothing there and lets the classifier judge. Writes to settings files, `cyberine-devguard` configuration, transcripts and `protect` paths still ask in every profile. A repository's `.claude/cyberine-devguard.json` may set `"profile": "strict"`, never `assist`.
+In auto mode a hook `ask` is not handed to the classifier: Claude Code asks you directly, so `assist` emits nothing there and lets the classifier judge. Writes to settings files, `cyberine-devguard` configuration, transcripts, the folders Claude Code loads plugins and mods from (`~/.claude/dev-mods/` and `~/.claude/plugins/`, D58) and `protect` paths still ask in every profile, and are denied under bypassPermissions. A repository's `.claude/cyberine-devguard.json` may set `"profile": "strict"`, never `assist`.
 
 ## Data-destroying commands
 

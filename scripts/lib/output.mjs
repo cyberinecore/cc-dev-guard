@@ -8,9 +8,9 @@ const pluginName = NAME;
 const repoConfigFile = REPO_CONFIG_FILE;
 const retryMinutes = RETRY_WINDOW_MS / 60000;
 
-const ALWAYS_ASK = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected", "invalid-path", "unresolvable"]);
-export const GUARDED_FILE_WHYS = new Set(["config-file", "settings-file", "transcript", "devguard-data", "protected"]);
-const ALWAYS_ASK_FILES = new Set(["config-file", "settings-file", "transcript", "devguard-data"]);
+const ALWAYS_ASK = new Set(["config-file", "settings-file", "transcript", "devguard-data", "mod-dir", "protected", "invalid-path", "unresolvable"]);
+export const GUARDED_FILE_WHYS = new Set(["config-file", "settings-file", "transcript", "devguard-data", "mod-dir", "protected"]);
+const ALWAYS_ASK_FILES = new Set(["config-file", "settings-file", "transcript", "devguard-data", "mod-dir"]);
 
 const isBypass = (input) => input?.permission_mode === "bypassPermissions";
 
@@ -50,6 +50,8 @@ function alwaysAskWhat(v) {
       return `${pluginName}: \`${v.target}\`${via(v)} is a Claude Code session transcript, which ${pluginName} reads to learn the session's allowed directories.`;
     case "devguard-data":
       return `${pluginName}: \`${v.target}\`${via(v)} is inside ${pluginName}'s own data directory, which records the directories this session added.`;
+    case "mod-dir":
+      return `${pluginName}: \`${v.target}\`${via(v)} is in a folder Claude Code loads plugins and mods from; code placed there can run without passing through any hook, so ${pluginName} could no longer see what it does.`;
     case "protected":
       return `${pluginName}: \`${v.target}\`${via(v)} is under a path this repository protects in .claude/${repoConfigFile}.`;
     default:

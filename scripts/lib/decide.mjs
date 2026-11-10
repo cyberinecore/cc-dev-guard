@@ -43,6 +43,12 @@ export function decide(input, ctx = {}) {
   return last;
 }
 
+const MOD_LOAD_DIRS = ["dev-mods", "plugins"];
+
+function isModDir(path, configDir) {
+  return MOD_LOAD_DIRS.some((d) => isUnder(path, join(configDir, d)));
+}
+
 function isTranscript(resolved, configDir) {
   const projects = join(configDir, "projects");
   return resolved.endsWith(".jsonl") && isUnder(resolved, projects);
@@ -88,6 +94,7 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
   const configDir = resolveDir(configDirOf(env));
   if (isClaudeSettingsFile(r.resolved, configDir) || isClaudeSettingsFile(target, configDir)) return { action: "cross", why: "settings-file", target };
   if (isTranscript(r.resolved, configDir)) return { action: "cross", why: "transcript", target };
+  if (isModDir(r.resolved, configDir) || isModDir(target, configDir)) return { action: "cross", why: "mod-dir", target };
   if (isAbsolute(env.CLAUDE_PLUGIN_DATA || "") && isUnder(r.resolved, resolveDir(env.CLAUDE_PLUGIN_DATA))) return { action: "cross", why: "devguard-data", target };
   for (const p of config.protect || []) {
     if (isUnder(r.resolved, resolveDir(p))) return { action: "cross", why: "protected", target };
