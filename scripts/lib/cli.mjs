@@ -20,13 +20,14 @@ import { mcpWriteTargets } from "./mcpfs.mjs";
 import { GUARDED_FILE_WHYS, render, renderDanger, renderDangerAsk, renderError, renderLive, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
-import { promptNames, prunePromptRecords, recordPrompt } from "./prompts.mjs";
+import { promptNames, prunePromptRecords, recordPickerAnswer, recordPrompt } from "./prompts.mjs";
 
 const usage = `usage: ${pluginName} <command>
 
   hook                      read a PreToolUse event on stdin and print a decision (used by hooks/hooks.json)
   directory-added           record a DirectoryAdded event for this session (used by hooks/hooks.json)
   prompt-submit             record hashed words of the user's prompt under bypassPermissions (used by hooks/hooks.json)
+  picker-answer             record hashed words of the option the user picked in AskUserQuestion under bypassPermissions (used by hooks/hooks.json)
   session-start             warn when node is too old and prune old session records (used by hooks/hooks.json)
   explain <path> [options]  show the verdict for a write to <path>
   status [options]          show the session repository, allowed directories and configuration
@@ -416,6 +417,13 @@ export async function main(argv, { env = namedEnv(process.env), stdout = process
       try {
         const input = JSON.parse(readFileSync(0, "utf8"));
         recordPrompt(input, env, loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, input?.cwd) }));
+      } catch {}
+      return 0;
+    }
+    if (cmd === "picker-answer") {
+      try {
+        const input = JSON.parse(readFileSync(0, "utf8"));
+        recordPickerAnswer(input, env, loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, input?.cwd) }));
       } catch {}
       return 0;
     }

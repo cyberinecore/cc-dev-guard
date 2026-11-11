@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.18.1] - 2026-11-11
+
+- Feature: under `bypassPermissions`, picking an `AskUserQuestion` option whose label names the settings file or key (for example "Enable in settings.local.json") now counts as your word for that turn, like typing it (D60). Before, you picked the hub grant in a picker and were then asked to type it again. Only your actual pick counts, read after you answer; the question text, option descriptions and declining answers do not.
+- Measured: the arguments of a typed slash command are part of the recorded prompt, so `/command ... settings.local.json` already counted.
+
 ## [0.18.0] - 2026-11-11
 
 - Feature: a hub repository can let its sessions write into its own git submodules from its own gitignored `.claude/settings.local.json`, with `"env": {"CYBERINE_DEVGUARD_HUB_SUBMODULES": "true"}`, instead of the user option `hub_repos` (D59). The file counts only while git ignores it and has never tracked it, so nothing a clone ships can grant it. Writing the key asks you first; under `bypassPermissions` it passes only when your own prompt names the file or the key.

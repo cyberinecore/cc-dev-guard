@@ -67,6 +67,34 @@ export function recordPrompt(input, env, config, now = Date.now()) {
   return true;
 }
 
+const DECLINE = /\b(no|not|don'?t|do not|never|skip|cancel|deny|reject|later|keep)\b|không|đừng|bỏ qua|hủy|huỷ|để sau/i;
+
+export function pickerAnswerTexts(input) {
+  const answers = input?.tool_response?.answers;
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return [];
+  return Object.values(answers).filter((a) => typeof a === "string" && a.trim() !== "" && !DECLINE.test(a));
+}
+
+export function recordPickerAnswer(input, env, config, now = Date.now()) {
+  const p = recordPath(env, input?.session_id);
+  if (!p || input?.tool_name !== "AskUserQuestion" || !shouldRecord(input, config)) return false;
+  if (typeof input?.prompt_id !== "string" || input.prompt_id === "") return false;
+  const texts = pickerAnswerTexts(input);
+  if (!texts.length) return false;
+  let tokens = [];
+  try {
+    const rec = JSON.parse(readFileSync(p, "utf8"));
+    if (rec?.promptId === input.prompt_id && Array.isArray(rec.tokens)) tokens = rec.tokens;
+  } catch {}
+  const merged = new Set(tokens);
+  for (const t of texts) for (const w of promptTokens(t)) if (merged.size < MAX_TOKENS) merged.add(hashToken(w));
+  mkdirSync(promptDir(env), { recursive: true, mode: 0o700 });
+  const tmp = `${p}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify({ promptId: input.prompt_id, time: new Date(now).toISOString(), tokens: [...merged] }), { mode: 0o600 });
+  renameSync(tmp, p);
+  return true;
+}
+
 export function prunePromptRecords(env, now = Date.now()) {
   const dir = promptDir(env);
   if (!dir) return;

@@ -161,6 +161,20 @@ Measured 2026-11-10 on Claude Code 2.1.321 (task kcphs, headless `claude -p --mo
 
 Since 0.17.3 (D57) `prompt-submit` ignores a prompt whose text starts with a tag (`<task-notification>`, `<cross-session-message ...>`, any `<name ...>`) and keeps the earlier record. End-to-end through `devguard.mjs prompt-submit` and `hook`: a peer message naming `CLAUDE_CODE_SUBAGENT_MODEL` after the user typed "fix the README typo" passed an Edit of `.claude/settings.local.json` on 0.17.2 and is denied once on 0.17.3; the user naming the key still passes. Model behaviour in the same probes: haiku declined both the injected file instruction and the peer request on its own, which is a model choice, not a guard.
 
+## Slash-command arguments and AskUserQuestion answers (Claude Code 2.1.322, D60)
+
+Measured 2026-11-11 with a logging hook in a scratch project, model haiku, bypassPermissions.
+
+| what | how measured | result |
+|---|---|---|
+| a typed `/skill` with arguments | `claude -p "/probeskill hub grant settings.local.json"` | `UserPromptSubmit` `prompt` is the whole line, `/probeskill hub grant settings.local.json`, so the words after the command are recorded |
+| a typed `/command` with arguments | `claude -p "/probecmd hub grant settings.local.json"` (a `.claude/commands` file) | same: the whole line |
+| `AskUserQuestion` in `claude -p` | the model was told to call it | the tool is not offered in print mode; no hook fired |
+| `AskUserQuestion` in an interactive session, the model passing `answers` itself | the model was told to pre-fill `answers` with "Yes" | `PreToolUse` shows the pre-filled `answers`; the picker is still shown to the user; the user picked "No"; `PostToolUse` `tool_input.answers` and `tool_response.answers` both read "No" |
+| `PostToolUse` of `AskUserQuestion` | same session | carries `prompt_id` (the turn's id), `tool_use_id` and `permission_mode` |
+
+So only `PostToolUse` `tool_response.answers` is the user's pick; a value in `PreToolUse` can come from the model. Not measured: the "Type something" free-text and "Chat about this" answers, and a picker cancelled with Esc.
+
 ## Mods (Claude Code 2.1.321, task kqcm9)
 
 Measured 2026-11-10 with headless `claude -p --model haiku --permission-mode bypassPermissions`, a logging PreToolUse hook and Cyberine DevGuard 0.17.3 from this repository as a `--settings` hook. The probe mod's `prompt.submit` hook wrote into a second git repository and ran a danger_guard command four ways. Both repositories sat in `$TMPDIR`, outside every allowance (an earlier run under `$CLAUDE_JOB_DIR/tmp` passed through the job-tmp allowance and is not counted).

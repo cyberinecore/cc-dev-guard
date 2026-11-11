@@ -159,7 +159,7 @@ function setsHubGrant(toolInput) {
   return texts.some((t) => typeof t === "string" && t.includes(HUB_GRANT_KEY));
 }
 
-const hubGrantNote = `The change sets ${HUB_GRANT_KEY}, which lets this repository write into its own submodules in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key. Ask the user to confirm in their own message, then retry.`;
+const hubGrantNote = `The change sets ${HUB_GRANT_KEY}, which lets this repository write into its own submodules in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key, or the user picks an AskUserQuestion option whose label names it (for example \"Enable in settings.local.json\"). Ask the user one of those ways, then retry.`;
 
 function renderSettingsBypass(v, { input, now, markerDir, warnings, promptNamed }) {
   if (promptNamed) return null;
