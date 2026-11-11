@@ -69,7 +69,7 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `profile` | `assist` | `assist` or `strict`; see [Profiles](#profiles) |
 | `mode` | `ask` | `ask`, `deny-once`, `warn` or `off`; covers writes to another repository only |
 | `extra_allowed_dirs` | none | absolute directories every session may write to |
-| `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts) |
+| `hub_repos` | none | absolute paths of repositories whose own git submodules count as part of them (both the absorbed and the old in-tree `.git` layouts); a hub can instead carry `"env": {"CYBERINE_DEVGUARD_HUB_SUBMODULES": "true"}` in its own gitignored, untracked `.claude/settings.local.json` (D59) |
 | `allow_ignored` | `true` | let writes to paths the other repository gitignores pass |
 | `allow_ignored_nested_repos` | `true` | let writes into a git repository nested inside the session repository under a path the session repository gitignores pass (an agent's scratch repository in `.local/tmp/`); off: ask like any other repository |
 | `log_decisions` | `false` | append each crossing (time, session id, tool, path, verdict), and each `danger_guard`, `live_guard` or internal-error stop (guard, verdict and the reason shown to Claude, with secret-looking values masked and `$HOME` shortened to `~`; the command itself is not stored), to `decisions.jsonl` in the plugin data directory; nothing is sent anywhere |
@@ -103,7 +103,7 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 - `relaunchLimit` can only be lowered, to a whole number of at least 1.
 - `protectedBranches` adds branch names to the user's list; it cannot remove one.
 - `protect` lists paths relative to the repository; writes under them ask.
-- Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, `allowDangerEnv`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its `.claude/settings.json` or `.claude/settings.local.json`.
+- Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, `allowDangerEnv`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its `.claude/settings.json` or `.claude/settings.local.json`. The one exception is the hub grant `CYBERINE_DEVGUARD_HUB_SUBMODULES` in a `.claude/settings.local.json` that git ignores and never tracked: it covers only that repository's own submodules, and writing it asks you first (D59).
 
 ## Bash and MCP writes
 

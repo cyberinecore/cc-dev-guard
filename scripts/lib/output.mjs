@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
 import { ALLOWED_DIRS_SHOWN, NAME, REPO_CONFIG_FILE, RETRY_WINDOW_MS } from "./constants.mjs";
+import { HUB_GRANT_KEY } from "./allowances.mjs";
 import { isUncertainDanger } from "./dangerguard.mjs";
 
 const pluginName = NAME;
@@ -74,7 +75,7 @@ function insideWorkingDir(v) {
 
 export function fixHint(v) {
   if (v.why !== "other-worktree" && insideWorkingDir(v)) {
-    return `To allow it, the user can open /config, find the ${pluginName} options, and add \`${v.sessionTop}\` to hub_repos to cover this repository's submodules, or \`${v.targetTop}\` to extra_allowed_dirs to cover just this one; both last across sessions. \`/add-dir\` does not help here: for a folder inside the working directory, Claude Code 2.1.312 only loads its skills and grants no write access.`;
+    return `To allow it, the user can open /config, find the ${pluginName} options, and add \`${v.sessionTop}\` to hub_repos, or set \`"env": {"${HUB_GRANT_KEY}": "true"}\` in this repository's gitignored \`.claude/settings.local.json\`, to cover this repository's submodules, or \`${v.targetTop}\` to extra_allowed_dirs to cover just this one; both last across sessions. \`/add-dir\` does not help here: for a folder inside the working directory, Claude Code 2.1.312 only loads its skills and grants no write access.`;
   }
   const dir = dirname(v.resolved || v.target);
   return `To allow it, the user can run \`/add-dir ${dir}\` for this session, or add \`${dir}\` to the ${pluginName} option extra_allowed_dirs (/config) for every session; a path the other repository gitignores also passes.`;
@@ -153,8 +154,16 @@ function settingsKey(v, input) {
   return `settings\u0000${v.resolved || v.target}\u0000${createHash("sha1").update(JSON.stringify(input?.tool_input ?? null)).digest("hex")}`;
 }
 
+function setsHubGrant(toolInput) {
+  const texts = [toolInput?.content, toolInput?.new_string, toolInput?.command, ...(Array.isArray(toolInput?.edits) ? toolInput.edits.map((e) => e?.new_string) : [])];
+  return texts.some((t) => typeof t === "string" && t.includes(HUB_GRANT_KEY));
+}
+
+const hubGrantNote = `The change sets ${HUB_GRANT_KEY}, which lets this repository write into its own submodules in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key. Ask the user to confirm in their own message, then retry.`;
+
 function renderSettingsBypass(v, { input, now, markerDir, warnings, promptNamed }) {
   if (promptNamed) return null;
+  if (setsHubGrant(input?.tool_input)) return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${hubGrantNote}`, warnings));
   if (!firstTry(settingsKey(v, input), { input, now, markerDir })) return null;
   return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${settingsOnceNote}`, warnings));
 }

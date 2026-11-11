@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { configDirOf } from "./allowances.mjs";
+import { configDirOf, localHubGrant } from "./allowances.mjs";
 import { loadConfig, repoSetsEnv } from "./config.mjs";
 import { FALLBACK_MARKER_DIR, NAME, NO_RM_PROMPT_ENV, VERSION } from "./constants.mjs";
 
@@ -360,6 +360,7 @@ function describeSession(opts, env) {
     `protected branches: ${config.protectedBranches.join(", ") || "none"}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
+    `hub grant in local settings: ${(repo && localHubGrant(git.toplevel(root), git)) || "none"}`,
     `repo config file: ${config.repoFile || "none"}`,
     `protected paths: ${config.protect.join(", ") || "none"}`,
   ];

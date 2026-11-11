@@ -53,8 +53,20 @@ export function makeGit(onGit) {
       return run(dir, ["check-ignore", "-q", "--", path]).ok;
     },
     isGitlink(top, rel) {
-      const r = run(top, ["ls-files", "--stage", "--", rel]);
-      return r.ok && r.out.trimStart().startsWith("160000 ");
+      const r = run(top, ["ls-files", "--stage", "-z", "--", rel]);
+      if (!r.ok) return false;
+      const want = rel.split(sep).join("/");
+      return r.out.split("\0").some((e) => {
+        const tab = e.indexOf("\t");
+        return tab > 0 && e.slice(tab + 1) === want && /^160000 [0-9a-f]+ 0$/.test(e.slice(0, tab));
+      });
+    },
+    isUntracked(top, rel) {
+      const idx = run(top, ["ls-files", "-z", "--cached", "--", rel]);
+      if (!idx.ok || idx.out !== "") return false;
+      if (!run(top, ["rev-parse", "--verify", "-q", "HEAD"]).ok) return true;
+      const head = run(top, ["ls-tree", "-z", "HEAD", "--", rel]);
+      return head.ok && head.out === "";
     },
     mainRoot(dir) {
       const r = run(dir, ["rev-parse", "--path-format=absolute", "--show-toplevel", "--git-dir", "--git-common-dir"]);

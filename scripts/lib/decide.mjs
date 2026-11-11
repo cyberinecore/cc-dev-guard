@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, join, relative } from "node:path";
-import { configDirOf, matchAllowance } from "./allowances.mjs";
+import { configDirOf, localHubGrant, matchAllowance } from "./allowances.mjs";
 import { defaultConfig, isClaudeSettingsFile, isConfigFile } from "./config.mjs";
 import { PATH_KEYS } from "./constants.mjs";
 import { isSubmoduleOf, makeGit } from "./git.mjs";
@@ -119,11 +119,12 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
   if (allowance) return pass(`allowance:${allowance}`);
 
   const sessionTop = git.toplevel(s.root);
-  if (why === "cross-repo" && (config.hubRepos || []).some((h) => resolveDir(h) === sessionTop)) {
+  const hubBy = why !== "cross-repo" || !sessionTop ? "" : (config.hubRepos || []).some((h) => resolveDir(h) === sessionTop) ? "hub-submodule" : localHubGrant(sessionTop, git) ? "hub-submodule-local" : "";
+  if (hubBy) {
     const targetTop = git.toplevel(r.dir);
     const rel = targetTop ? relative(sessionTop, targetTop) : "";
     const inside = rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
-    if (inside && (isSubmoduleOf(targetRepo, s.repo) || git.isGitlink(sessionTop, rel))) return pass("hub-submodule");
+    if (inside && (isSubmoduleOf(targetRepo, s.repo) || git.isGitlink(sessionTop, rel))) return pass(hubBy);
   }
 
   if (why === "cross-repo" && config.allowIgnoredNestedRepos && sessionTop) {

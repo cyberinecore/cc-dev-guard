@@ -24,7 +24,7 @@
 | missing transcript | block | block | same |
 | worktree root, write into main | pass | pass | same |
 | hub -> submodule, no opt-in | block | block | same |
-| hub -> submodule, Go overlay file | pass | block | accepted: Go reads the overlay rule file; devguard needs the user option hub_repos (D11) |
+| hub -> submodule, Go overlay file | pass | block | accepted: Go reads the overlay rule file; devguard needs the user option hub_repos (D11) or the hub's ignored local settings key (D59) |
 | submodule -> hub | block | block | same |
 | repo git cannot read | pass | block | accepted: Go treats a failed git call as non-git and allows; devguard treats a .git entry as a repo |
 | devguard config file | pass | block | accepted: devguard always asks about its own config file |

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, relative, sep } from "node:path";
 import { expandHome, isUnder, resolveDir } from "./paths.mjs";
@@ -27,6 +27,22 @@ function localAutoMemoryDir(sessionRoot, home, git) {
   const path = join(sessionRoot, ".claude", "settings.local.json");
   const dir = autoMemoryDirIn(path, home);
   return dir && git.isIgnored(sessionRoot, path) ? dir : "";
+}
+
+export const HUB_GRANT_KEY = "CYBERINE_DEVGUARD_HUB_SUBMODULES";
+
+const HUB_GRANT_FILE = [".claude", "settings.local.json"];
+
+export function localHubGrant(sessionTop, git) {
+  if (typeof sessionTop !== "string" || !isAbsolute(sessionTop) || !git?.isUntracked) return "";
+  const path = join(sessionTop, ...HUB_GRANT_FILE);
+  try {
+    if (!lstatSync(join(sessionTop, HUB_GRANT_FILE[0])).isDirectory() || !lstatSync(path).isFile()) return "";
+    if (JSON.parse(readFileSync(path, "utf8"))?.env?.[HUB_GRANT_KEY] !== "true") return "";
+  } catch {
+    return "";
+  }
+  return git.isUntracked(sessionTop, HUB_GRANT_FILE.join("/")) && git.isIgnored(sessionTop, path) ? path : "";
 }
 
 export function allowanceDirs({ env = {}, input = {}, config, sessionRoot, git }) {

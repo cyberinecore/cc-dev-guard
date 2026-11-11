@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.18.0] - 2026-11-11
+
+- Feature: a hub repository can let its sessions write into its own git submodules from its own gitignored `.claude/settings.local.json`, with `"env": {"CYBERINE_DEVGUARD_HUB_SUBMODULES": "true"}`, instead of the user option `hub_repos` (D59). The file counts only while git ignores it and has never tracked it, so nothing a clone ships can grant it. Writing the key asks you first; under `bypassPermissions` it passes only when your own prompt names the file or the key.
+- Security: the submodule check behind `hub_repos` now matches the gitlink's exact path, so a nested repository that is not itself a submodule no longer passes because a deeper submodule sits inside it.
+
 ## [0.17.4] - 2026-11-10
 
 - Security: writes into the folders Claude Code loads plugins and mods from, `~/.claude/dev-mods/` and `~/.claude/plugins/`, are now guarded like Cyberine DevGuard's own files: they ask in every mode and are denied under `bypassPermissions` (D58). Code loaded from those folders can act without passing through the hook, so the write that places it there is the last point the guard can stop. File tools, Bash writes (`cp`, `mv`, `mkdir`, redirects and similar) and filesystem MCP writes are all covered.
