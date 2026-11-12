@@ -80,6 +80,14 @@ function withRelocated(allowed, input, env, readRelocated) {
   return { ...allowed, dirs: allowed.dirs.includes(dir) ? allowed.dirs : [...allowed.dirs, dir], sources };
 }
 
+function sameRepo(targetRepo, sessionRepo, targetDir, sessionRoot, git) {
+  if (targetRepo === sessionRepo) return true;
+  if (!targetRepo.startsWith("unverified:") && !sessionRepo.startsWith("unverified:")) return false;
+  if (typeof git.dotGitTop !== "function") return false;
+  const top = git.dotGitTop(targetDir);
+  return top !== "" && top === git.dotGitTop(sessionRoot);
+}
+
 function judge(raw, { input, env, config, git, readDirs, readScope, cwd, sessionInfo, deps }) {
   if (raw.includes("\u0000")) return { action: "cross", why: "invalid-path", target: raw.replace(/\u0000/g, "\\0") };
   let target = raw;
@@ -107,7 +115,7 @@ function judge(raw, { input, env, config, git, readDirs, readScope, cwd, session
   const targetRepo = git.commonDir(r.dir);
   if (!targetRepo) return pass("non-git-target");
   let why = "cross-repo";
-  if (targetRepo === s.repo) {
+  if (sameRepo(targetRepo, s.repo, r.dir, s.root, git)) {
     if (!config.isolateWorktrees) return pass("same-repo");
     const ownTop = git.toplevel(s.root);
     const mainTop = git.mainRoot ? git.mainRoot(s.root) : "";

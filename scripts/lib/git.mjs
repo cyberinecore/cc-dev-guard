@@ -43,6 +43,10 @@ export function makeGit(onGit) {
       const top = dotGitAncestor(dir);
       return top ? "unverified:" + realPathOr(top) : "";
     },
+    dotGitTop(dir) {
+      const top = dotGitAncestor(dir);
+      return top ? realPathOr(top) : "";
+    },
     toplevel(dir) {
       const r = run(dir, ["rev-parse", "--show-toplevel"]);
       if (r.ok && r.out.trim()) return realPathOr(r.out.trim());

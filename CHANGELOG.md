@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.18.2] - 2026-11-12
+
+- Fix: a write inside the session's own repository could be denied as "outside this session's repository" when one git call failed or timed out, for example during a heavy `swift build`, because the failing side was compared in a fallback form the other side never used (D61). Both sides now fall back to the same check, the nearest folder holding `.git`, so the same checkout matches and a nested repository, submodule or other worktree still does not.
+
 ## [0.18.1] - 2026-11-11
 
 - Feature: under `bypassPermissions`, picking an `AskUserQuestion` option whose label names the settings file or key (for example "Enable in settings.local.json") now counts as your word for that turn, like typing it (D60). Before, you picked the hub grant in a picker and were then asked to type it again. Only your actual pick counts, read after you answer; the question text, option descriptions and declining answers do not.
