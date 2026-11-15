@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.18.2",
+  "version": "0.19.0",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, and asks before or denies commands that disrupt the user's running machine (pkill by name, tmux sessions it did not create, system settings, launch agents, repeated app relaunches), plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
@@ -46,6 +46,13 @@
       "type": "string",
       "title": "Hub repositories",
       "description": "Absolute paths of repositories whose own submodules count as part of the repository, so a session there may write into them.",
+      "multiple": true,
+      "default": []
+    },
+    "output_paths": {
+      "type": "string",
+      "title": "Build output paths",
+      "description": "Absolute paths of build output inside a repository, such as /path/to/repo/packages/*/dist-types (* matches within one folder name). Ignored files at or below such a path do not count as lost work when a git worktree of that repository is removed. A value set by a repository's .claude settings is ignored.",
       "multiple": true,
       "default": []
     },

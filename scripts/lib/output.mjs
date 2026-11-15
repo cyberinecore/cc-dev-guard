@@ -161,8 +161,18 @@ function setsHubGrant(toolInput) {
 
 const hubGrantNote = `The change sets ${HUB_GRANT_KEY}, which lets this repository write into its own submodules in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key, or the user picks an AskUserQuestion option whose label names it (for example \"Enable in settings.local.json\"). Ask the user one of those ways, then retry.`;
 
+const reOutputPathsKey = /output_paths/i;
+
+function setsOutputPaths(toolInput) {
+  const texts = [toolInput?.content, toolInput?.new_string, toolInput?.command, ...(Array.isArray(toolInput?.edits) ? toolInput.edits.map((e) => e?.new_string) : [])];
+  return texts.some((t) => typeof t === "string" && reOutputPathsKey.test(t));
+}
+
+const outputPathsNote = `The change sets output_paths, which tells ${pluginName} that ignored files under those paths may be deleted with a worktree in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key, or the user picks an AskUserQuestion option whose label names it. Ask the user one of those ways, then retry.`;
+
 function renderSettingsBypass(v, { input, now, markerDir, warnings, promptNamed }) {
   if (promptNamed) return null;
+  if (setsOutputPaths(input?.tool_input)) return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${outputPathsNote}`, warnings));
   if (setsHubGrant(input?.tool_input)) return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${hubGrantNote}`, warnings));
   if (!firstTry(settingsKey(v, input), { input, now, markerDir })) return null;
   return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${settingsOnceNote}`, warnings));

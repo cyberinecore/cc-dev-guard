@@ -2,6 +2,13 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.19.0] - 2026-11-16
+
+- Feature: new option `output_paths` lists build output folders by absolute path (for example `/path/to/repo/packages/*/dist-types`). Ignored files under one no longer stop `git worktree remove` in any worktree of that repository (D62). The stop message names the folder to declare. A repository cannot set the option for itself.
+- Feature: under `bypassPermissions`, `git worktree remove` of a worktree that holds ignored files passes when your prompt names the worktree, or you pick an `AskUserQuestion` option whose label names it. Before, the only way was to run the command yourself.
+- Fix: `git worktree remove` with a path built from a variable or glob, such as `.claude/worktrees/$name` in a loop, is now checked against the worktrees it can name and passes when none would lose anything. Before, it was stopped every time as a command the guard could not check.
+- Fix: `git worktree remove` and `git branch -D` written after `do` or `then` on the same line are now checked like any other.
+
 ## [0.18.2] - 2026-11-12
 
 - Fix: a write inside the session's own repository could be denied as "outside this session's repository" when one git call failed or timed out, for example during a heavy `swift build`, because the failing side was compared in a fallback form the other side never used (D61). Both sides now fall back to the same check, the nearest folder holding `.git`, so the same checkout matches and a nested repository, submodule or other worktree still does not.

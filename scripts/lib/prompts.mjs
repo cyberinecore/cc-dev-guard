@@ -145,3 +145,20 @@ export function promptNames(input, env, target) {
   const have = new Set(rec.tokens);
   return settingsCandidates(target, input.tool_input).some((c) => have.has(hashToken(c)));
 }
+
+export function promptHasAny(input, env, names) {
+  const p = recordPath(env, input?.session_id);
+  if (!p || typeof input?.prompt_id !== "string" || input.prompt_id === "") return false;
+  let rec;
+  try {
+    rec = JSON.parse(readFileSync(p, "utf8"));
+  } catch {
+    return false;
+  }
+  if (!rec || rec.promptId !== input.prompt_id || !Array.isArray(rec.tokens)) return false;
+  const have = new Set(rec.tokens);
+  return names.some((n) => {
+    const c = String(n).toLowerCase().replace(/^[.\/~-]+/, "").replace(/[.\/:-]+$/, "");
+    return c.length >= 3 && have.has(hashToken(c));
+  });
+}

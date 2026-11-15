@@ -483,14 +483,15 @@ export function dangerReason(command, { home = "", configDir = "", protectedBran
   return tagWriteShapeReason(command) || guardDepth(command, 0, opts);
 }
 
-export function dangerAskReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, isCacheDir = null, isRepoRoot = null, root = "", cwd = "", git = null } = {}) {
+export function dangerAskReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, isCacheDir = null, isRepoRoot = null, root = "", cwd = "", git = null, outputPaths = [], named = null } = {}) {
   if (typeof command !== "string" || command === "") return "";
-  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), isCacheDir, isRepoRoot, root, cwd, git };
+  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), isCacheDir, isRepoRoot, root, cwd, git, outputPaths, named };
   return guardDepth(command, 0, opts, subcommandAsk);
 }
 
 const WORKTREE_ROUTES = "Leave a session's own worktree with ExitWorktree, remove a background session's worktree with `claude rm <id>`, or run plain `git worktree remove <path>` without --force, which refuses a worktree that holds uncommitted work.";
 const GIT_PREFIX_BINS = new Set(["sudo", "env", "command", "nohup", "time", "exec"]);
+const SHELL_KEYWORDS = new Set(["do", "then", "else", "!", "{", "("]);
 const reWorktreeRoot = /(^|\/)\.claude\/worktrees(\/[^/]+)?\/?$/;
 
 function subcommandAsk(scan, opts, sub) {
@@ -534,8 +535,8 @@ function gitInvocation(sub) {
   const { words, ok } = shellWords(sub);
   if (!ok) return { unparsed: true };
   let i = 0;
-  while (i < words.length && (reAssignWord.test(words[i].raw) || GIT_PREFIX_BINS.has(words[i].value))) i++;
-  if (!words[i] || baseName(words[i].value) !== "git") return null;
+  while (i < words.length && (reAssignWord.test(words[i].raw) || GIT_PREFIX_BINS.has(words[i].value) || SHELL_KEYWORDS.has(words[i].value))) i++;
+  if (!words[i] || baseName(words[i].value.replace(/^[({]+/, "")) !== "git") return null;
   const g = { dirs: [], gitDir: false, sub: "", args: [] };
   for (i++; i < words.length; i++) {
     const v = words[i].value;
@@ -602,50 +603,144 @@ function worktreeRemoveAsk(g, opts) {
   return "";
 }
 
-function worktreeLoss(p, g, { git, home, cwd }) {
-  const what = `\`git worktree remove ${p}\``;
-  if (g.gitDir) return probeFailed(what, "it names --git-dir or --work-tree");
-  const base = gitBase(g, { cwd, home });
-  if (!base) return probeFailed(what, "the directory git runs in cannot be resolved");
-  if (/[$`*?]/.test(p)) return probeFailed(what, "the path is built from a variable, substitution or glob");
-  if (!git) return probeFailed(what, "git is not available to the guard");
-  const list = git.worktrees(base);
-  if (!list) return probeFailed(what, "`git worktree list` failed");
-  const want = pathKey(resolvePath(base, /^~(?:\/|$)/.test(p) && home ? home + p.slice(1) : p));
-  let entry = list.find((e) => pathKey(e.path) === want);
-  if (!entry && !isAbsPath(p)) {
-    const tail = "/" + slashed(p).replace(/\/+$/, "");
-    const named = list.filter((e) => slashed(e.path).endsWith(tail));
-    if (named.length === 1) entry = named[0];
+const reVaguePath = /[$`*?[]/;
+const CONSENT_NAME_MIN = 8;
+
+function outputPatterns(outputPaths, mainRoot) {
+  const roots = [...new Set([slashed(mainRoot).replace(/\/+$/, ""), pathKey(mainRoot)])];
+  const out = [];
+  for (const raw of outputPaths || []) {
+    const s = slashed(raw).replace(/\/+$/, "");
+    const root = roots.find((r) => s.startsWith(r + "/"));
+    if (!root) continue;
+    const segs = s.slice(root.length + 1).split("/");
+    if (segs.some((seg) => seg === "" || seg === "." || seg === ".." || seg === ".git" || seg.includes("**"))) continue;
+    out.push(segs.map((seg) => new RegExp("^" + seg.split("*").map((t) => t.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*") + "$")));
   }
-  if (!entry || entry === list[0] || entry.bare || entry.prunable !== null) return "";
+  return out;
+}
+
+function sharedFolder(dirs) {
+  let shared = dirs[0].split("/");
+  for (const d of dirs.slice(1)) {
+    const segs = d.split("/");
+    let i = 0;
+    while (i < shared.length && shared[i] === segs[i]) i++;
+    shared = shared.slice(0, i);
+  }
+  return shared.join("/");
+}
+
+function worktreeEntryLoss(entry, base, mainRoot, { git, outputPaths }) {
   const lost = [];
   const ignored = git.ignoredPaths(entry.path);
-  if (!ignored) return probeFailed(what, "`git ls-files --ignored` failed");
+  if (!ignored) return { failed: "`git ls-files --ignored` failed" };
+  const patterns = outputPatterns(outputPaths, mainRoot);
+  const declared = (x) => {
+    const segs = x.replace(/\/+$/, "").split("/");
+    return patterns.some((pat) => segs.length >= pat.length && pat.every((re, i) => re.test(segs[i])));
+  };
   const regenerable = (x) => x.split("/").some((seg) => REGENERABLE_DIRS.has(seg)) || /\.tsbuildinfo$/.test(x);
   const kept = [];
+  const folders = [];
+  const parentOf = (y) => (y.includes("/") ? y.slice(0, y.lastIndexOf("/")) : "");
   for (const x of ignored) {
     if (regenerable(x)) continue;
     if (!x.endsWith("/")) {
-      kept.push(x);
+      if (!declared(x)) {
+        kept.push(x);
+        folders.push(parentOf(x));
+      }
       continue;
     }
     const inner = git.ignoredPaths(entry.path, x);
-    if (!inner) return probeFailed(what, "`git ls-files --ignored` failed");
-    const left = [...new Set(inner.filter((y) => !regenerable(y)).map((y) => {
+    if (!inner) return { failed: "`git ls-files --ignored` failed" };
+    const rest = inner.filter((y) => !regenerable(y) && !(declared(y) && !y.endsWith("/")));
+    const left = [...new Set(rest.map((y) => {
       const segs = y.slice(x.length).split("/");
       return segs.length > 1 ? `${x}${segs[0]}/` : y;
     }))];
     kept.push(...left);
+    if (rest.length) folders.push(sharedFolder(rest.map((y) => parentOf(y.replace(/\/+$/, "")))));
   }
   if (kept.length) lost.push(`ignored files that no commit holds (${listed(kept)})`);
   if (entry.detached && entry.head) {
     const n = git.countRevs(base, [entry.head, "--not", "--branches", "--tags", "--remotes"]);
-    if (n === null) return probeFailed(what, "`git rev-list` failed");
+    if (n === null) return { failed: "`git rev-list` failed" };
     if (n > 0) lost.push(`${n} commit${n === 1 ? "" : "s"} reachable only from its detached HEAD \`${entry.head.slice(0, 12)}\``);
   }
-  if (!lost.length) return "";
-  return `${what} deletes ${lost.join(" and ")}. Move those files out or delete them once the user says they may go (a copy is not enough: the check looks at what is still in the worktree; regenerable folders such as tmp/, dist/ and node_modules/ do not count), and \`git -C ${entry.path} branch <name>\` keeps the commits; or approve only if they may go.`;
+  const folder = folders.find((d) => d && !/^\.local(\/|$)/.test(d) && !/(^|\/)\.env/.test(d));
+  return { lost, folder: folder || "" };
+}
+
+function vagueTargets(linked, p, base, home) {
+  const lit = slashed(p).slice(0, p.search(reVaguePath));
+  const cut = lit.lastIndexOf("/");
+  if (cut < 0) return linked;
+  let dir = lit.slice(0, cut) || "/";
+  if (/^~(?:\/|$)/.test(dir)) {
+    if (!home) return linked;
+    dir = home + dir.slice(1);
+  }
+  const dirKey = pathKey(resolvePath(base, dir)).replace(/\/+$/, "");
+  const prefix = `${dirKey}/${lit.slice(cut + 1)}`;
+  return linked.filter((e) => pathKey(e.path).startsWith(prefix));
+}
+
+function consentNames(entry, mainRoot) {
+  const path = slashed(entry.path).replace(/\/+$/, "");
+  const main = slashed(mainRoot).replace(/\/+$/, "");
+  const out = [path];
+  if (path.startsWith(main + "/")) out.push(path.slice(main.length + 1));
+  for (const short of [baseName(path), entry.branch]) if (short && short.length >= CONSENT_NAME_MIN) out.push(short);
+  return out;
+}
+
+function consentLabel(entry, mainRoot) {
+  const names = consentNames(entry, mainRoot);
+  const short = baseName(names[0]);
+  return short.length >= CONSENT_NAME_MIN ? short : names[1] || names[0];
+}
+
+function worktreeLoss(p, g, { git, home, cwd, outputPaths = [], named = null }) {
+  const what = `\`git worktree remove ${p}\``;
+  if (g.gitDir) return probeFailed(what, "it names --git-dir or --work-tree");
+  const base = gitBase(g, { cwd, home });
+  if (!base) return probeFailed(what, "the directory git runs in cannot be resolved");
+  if (!git) return probeFailed(what, "git is not available to the guard");
+  const list = git.worktrees(base);
+  if (!list) return probeFailed(what, "`git worktree list` failed");
+  const vague = reVaguePath.test(p);
+  let targets;
+  if (vague) targets = vagueTargets(list.slice(1).filter((e) => !e.bare && e.prunable === null), p, base, home);
+  else {
+    const want = pathKey(resolvePath(base, /^~(?:\/|$)/.test(p) && home ? home + p.slice(1) : p));
+    let entry = list.find((e) => pathKey(e.path) === want);
+    if (!entry && !isAbsPath(p)) {
+      const tail = "/" + slashed(p).replace(/\/+$/, "");
+      const byTail = list.filter((e) => slashed(e.path).endsWith(tail));
+      if (byTail.length === 1) entry = byTail[0];
+    }
+    if (!entry || entry === list[0] || entry.bare || entry.prunable !== null) return "";
+    targets = [entry];
+  }
+  const mainRoot = list[0].path;
+  const lossy = [];
+  for (const entry of targets) {
+    const r = worktreeEntryLoss(entry, base, mainRoot, { git, outputPaths });
+    if (r.failed) return probeFailed(what, r.failed);
+    if (r.lost.length) lossy.push({ entry, ...r });
+  }
+  if (!lossy.length) return "";
+  if (named && lossy.every((l) => named(consentNames(l.entry, mainRoot)))) return "";
+  const first = lossy[0];
+  const declare = first.folder ? ` If a folder listed here is build output, the user can declare it once in the plugin option output_paths (for example \`${slashed(mainRoot).replace(/\/+$/, "")}/${first.folder}\`), and it stops counting in every worktree of this repository.` : "";
+  const consent = named ? ` Under bypassPermissions the removal also passes once the user names the worktree in their prompt, or picks an AskUserQuestion option whose label names it (\`${consentLabel(first.entry, mainRoot)}\`).` : "";
+  if (vague) {
+    const more = lossy.length > 1 ? ` (and ${lossy.length - 1} more worktree${lossy.length === 2 ? "" : "s"} under that path hold work)` : "";
+    return `${what}: the path is built from a variable, substitution or glob, and of the worktrees it can name, \`${first.entry.path}\` holds ${first.lost.join(" and ")}${more}. Write each path literally so only the worktree you name is checked, or move those files out first.${declare}${consent}`;
+  }
+  return `${what} deletes ${first.lost.join(" and ")}. Move those files out or delete them once the user says they may go (a copy is not enough: the check looks at what is still in the worktree; regenerable folders such as tmp/, dist/ and node_modules/ do not count), and \`git -C ${first.entry.path} branch <name>\` keeps the commits; or approve only if they may go.${declare}${consent}`;
 }
 
 function branchDeleteAsk(g, opts) {

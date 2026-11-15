@@ -20,7 +20,7 @@ import { mcpWriteTargets } from "./mcpfs.mjs";
 import { GUARDED_FILE_WHYS, render, renderDanger, renderDangerAsk, renderError, renderLive, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
-import { promptNames, prunePromptRecords, recordPickerAnswer, recordPrompt } from "./prompts.mjs";
+import { promptHasAny, promptNames, prunePromptRecords, recordPickerAnswer, recordPrompt } from "./prompts.mjs";
 
 const usage = `usage: ${pluginName} <command>
 
@@ -212,11 +212,22 @@ function dangerCheck(command, input, { env, config, sessionRoot, home, cwd = "",
 
 function dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd = "", git }) {
   if (!config.dangerGuard) return null;
-  const reason = dangerAskReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd, git });
+  const reason = dangerAskReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd, git, outputPaths: config.outputPaths, named: namedWorktrees(input, env, config) });
   if (!reason) return null;
   const escape = escapeOpen(env, config, sessionRoot);
   if (escape.open) return null;
   return renderDangerAsk(reason, { input, escapeName: config.allowDangerEnv || ESCAPE_ENV, warnings: [...config.warnings, ...escape.warnings], profile: config.profile, now: Date.now(), markerDir: markerDirFor(env), bypassStrict: config.bypassStrict });
+}
+
+function namedWorktrees(input, env, config) {
+  if (input?.permission_mode !== "bypassPermissions" || config.profile === "strict" || config.bypassStrict) return null;
+  return (names) => {
+    try {
+      return promptHasAny(input, env, names);
+    } catch {
+      return false;
+    }
+  };
 }
 
 function tagWriteCheck(paths, { env, config, sessionRoot }) {
@@ -361,6 +372,7 @@ function describeSession(opts, env) {
     `protected branches: ${config.protectedBranches.join(", ") || "none"}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
+    `output paths: ${config.outputPaths.join(", ") || "none"}`,
     `hub grant in local settings: ${(repo && localHubGrant(git.toplevel(root), git)) || "none"}`,
     `repo config file: ${config.repoFile || "none"}`,
     `protected paths: ${config.protect.join(", ") || "none"}`,
