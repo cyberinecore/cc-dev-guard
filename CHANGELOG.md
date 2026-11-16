@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.19.1] - 2026-11-16
+
+- Feature: a repository's own `.claude/settings.local.json` can now set Cyberine DevGuard options for that repository, as `"env": {"CLAUDE_PLUGIN_OPTION_OUTPUT_PATHS": "packages/*/dist-types"}`, while git ignores the file and has never tracked it (D63). Every option except `allow_danger_env` counts, and `output_paths` entries there may be relative. Before, such values could only make the guard stricter, so `output_paths` had to be set globally in `/config`.
+- Security: under `bypassPermissions`, writing a Cyberine DevGuard option into any settings file is denied on every try unless your prompt or a picked option names the file or the key. Before, an identical retry passed.
+
 ## [0.19.0] - 2026-11-16
 
 - Feature: new option `output_paths` lists build output folders by absolute path (for example `/path/to/repo/packages/*/dist-types`). Ignored files under one no longer stop `git worktree remove` in any worktree of that repository (D62). The stop message names the folder to declare. A repository cannot set the option for itself.

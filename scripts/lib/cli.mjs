@@ -374,6 +374,7 @@ function describeSession(opts, env) {
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
     `output paths: ${config.outputPaths.join(", ") || "none"}`,
     `hub grant in local settings: ${(repo && localHubGrant(git.toplevel(root), git)) || "none"}`,
+    `options from the repository's own settings.local.json: ${config.localOptions.join(", ") || "none"}`,
     `repo config file: ${config.repoFile || "none"}`,
     `protected paths: ${config.protect.join(", ") || "none"}`,
   ];

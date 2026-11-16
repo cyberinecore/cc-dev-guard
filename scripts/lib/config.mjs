@@ -1,7 +1,8 @@
-import { readFileSync, statSync } from "node:fs";
+import { lstatSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
 import { DEFAULT_MODE, DEFAULT_PROFILE, MODES, OPTION_PREFIX, PROFILES, REPO_CONFIG_FILE } from "./constants.mjs";
 import { DEFAULT_PROTECTED_BRANCHES } from "./dangerguard.mjs";
+import { makeGit } from "./git.mjs";
 
 const defaultMode = DEFAULT_MODE;
 const modeList = MODES.join(", ");
@@ -35,6 +36,7 @@ export function defaultConfig() {
     denyAwsS3Deletes: true,
     allowDangerEnv: "",
     protect: [],
+    localOptions: [],
     repoFile: null,
     warnings: [],
   };
@@ -56,6 +58,39 @@ export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos"
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
   return OPTION_KEYS.filter((k) => repoSetsEnv(sessionRoot, OPTION_PREFIX + k.toUpperCase()));
+}
+
+const LOCAL_SETTINGS = [".claude", "settings.local.json"];
+const NEVER_FROM_LOCAL = new Set(["allow_danger_env"]);
+
+function settingsEnv(sessionRoot, file) {
+  try {
+    const env = JSON.parse(readFileSync(join(sessionRoot, ".claude", file), "utf8"))?.env;
+    return env && typeof env === "object" && !Array.isArray(env) ? env : {};
+  } catch {
+    return {};
+  }
+}
+
+function localSettingsAreTheUsers(sessionRoot, git) {
+  const path = join(sessionRoot, ...LOCAL_SETTINGS);
+  try {
+    if (!lstatSync(join(sessionRoot, LOCAL_SETTINGS[0])).isDirectory() || !lstatSync(path).isFile()) return false;
+    return git.isUntracked(sessionRoot, LOCAL_SETTINGS.join("/")) && git.isIgnored(sessionRoot, path);
+  } catch {
+    return false;
+  }
+}
+
+export function localOptionValues(sessionRoot, git = null) {
+  if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return {};
+  const env = settingsEnv(sessionRoot, LOCAL_SETTINGS[1]);
+  const set = OPTION_KEYS.filter((k) => !NEVER_FROM_LOCAL.has(k) && typeof env[OPTION_PREFIX + k.toUpperCase()] === "string");
+  if (!set.length || !localSettingsAreTheUsers(sessionRoot, git || makeGit())) return {};
+  const out = {};
+  for (const k of set) out[k] = env[OPTION_PREFIX + k.toUpperCase()];
+  if (out.output_paths !== undefined) out.output_paths = out.output_paths.split(",").map((s) => s.trim()).filter(Boolean).map((p) => (isAbsolute(p) ? p : join(sessionRoot, p))).join(",");
+  return out;
 }
 
 export function repoSetsEnv(sessionRoot, name) {
@@ -223,10 +258,16 @@ function applyRepoFile(c, file) {
   }
 }
 
-export function loadConfig({ env = {}, sessionRoot } = {}) {
+export function loadConfig({ env = {}, sessionRoot, git = null } = {}) {
   const c = defaultConfig();
   const w = c.warnings;
-  const untrusted = repoSetOptionKeys(sessionRoot);
+  const local = localOptionValues(sessionRoot, git);
+  c.localOptions = Object.keys(local);
+  const untrusted = repoSetOptionKeys(sessionRoot).filter((k) => !(k in local));
+  if (c.localOptions.length) {
+    env = { ...env };
+    for (const k of c.localOptions) env[OPTION_PREFIX + k.toUpperCase()] = local[k];
+  }
   const repoEnv = {};
   if (untrusted.length) {
     env = { ...env };

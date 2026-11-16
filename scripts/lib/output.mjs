@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
-import { ALLOWED_DIRS_SHOWN, NAME, REPO_CONFIG_FILE, RETRY_WINDOW_MS } from "./constants.mjs";
+import { ALLOWED_DIRS_SHOWN, NAME, OPTION_PREFIX, REPO_CONFIG_FILE, RETRY_WINDOW_MS } from "./constants.mjs";
 import { HUB_GRANT_KEY } from "./allowances.mjs";
+import { OPTION_KEYS } from "./config.mjs";
 import { isUncertainDanger } from "./dangerguard.mjs";
 
 const pluginName = NAME;
@@ -161,18 +162,18 @@ function setsHubGrant(toolInput) {
 
 const hubGrantNote = `The change sets ${HUB_GRANT_KEY}, which lets this repository write into its own submodules in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key, or the user picks an AskUserQuestion option whose label names it (for example \"Enable in settings.local.json\"). Ask the user one of those ways, then retry.`;
 
-const reOutputPathsKey = /output_paths/i;
+const reGuardOption = new RegExp(`output_paths|${OPTION_PREFIX}(?:${OPTION_KEYS.map((k) => k.toUpperCase()).join("|")})\\b`, "i");
 
-function setsOutputPaths(toolInput) {
+function setsGuardOption(toolInput) {
   const texts = [toolInput?.content, toolInput?.new_string, toolInput?.command, ...(Array.isArray(toolInput?.edits) ? toolInput.edits.map((e) => e?.new_string) : [])];
-  return texts.some((t) => typeof t === "string" && reOutputPathsKey.test(t));
+  return texts.some((t) => typeof t === "string" && reGuardOption.test(t));
 }
 
-const outputPathsNote = `The change sets output_paths, which tells ${pluginName} that ignored files under those paths may be deleted with a worktree in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key, or the user picks an AskUserQuestion option whose label names it. Ask the user one of those ways, then retry.`;
+const guardOptionNote = `The change sets a ${pluginName} option, which changes what this guard stops in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key, or the user picks an AskUserQuestion option whose label names it. Ask the user one of those ways, then retry.`;
 
 function renderSettingsBypass(v, { input, now, markerDir, warnings, promptNamed }) {
   if (promptNamed) return null;
-  if (setsOutputPaths(input?.tool_input)) return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${outputPathsNote}`, warnings));
+  if (setsGuardOption(input?.tool_input)) return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${guardOptionNote}`, warnings));
   if (setsHubGrant(input?.tool_input)) return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${hubGrantNote}`, warnings));
   if (!firstTry(settingsKey(v, input), { input, now, markerDir })) return null;
   return decision("deny", withWarnings(`Default: NO. ${alwaysAskWhat(v)} ${settingsOnceNote}`, warnings));
