@@ -212,7 +212,7 @@ function dangerCheck(command, input, { env, config, sessionRoot, home, cwd = "",
 
 function dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd = "", git }) {
   if (!config.dangerGuard) return null;
-  const reason = dangerAskReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd, git, outputPaths: config.outputPaths, named: namedWorktrees(input, env, config) });
+  const reason = dangerAskReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd, git, regenerablePaths: config.regenerablePaths, named: namedWorktrees(input, env, config) });
   if (!reason) return null;
   const escape = escapeOpen(env, config, sessionRoot);
   if (escape.open) return null;
@@ -372,7 +372,7 @@ function describeSession(opts, env) {
     `protected branches: ${config.protectedBranches.join(", ") || "none"}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,
-    `output paths: ${config.outputPaths.join(", ") || "none"}`,
+    `regenerable paths: ${config.regenerablePaths.join(", ") || "none"}`,
     `hub grant in local settings: ${(repo && localHubGrant(git.toplevel(root), git)) || "none"}`,
     `options from the repository's own settings.local.json: ${config.localOptions.join(", ") || "none"}`,
     `repo config file: ${config.repoFile || "none"}`,

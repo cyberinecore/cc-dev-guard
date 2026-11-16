@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.19.2] - 2026-11-17
+
+- Change: the option `output_paths` is now named `regenerable_paths`, after what it means: paths whose ignored files can be made again (D64). The old name still works.
+- Change: in a repository's own `.claude/settings.local.json`, options are now written as `CYBERINE_DEVGUARD_<OPTION>`, for example `"env": {"CYBERINE_DEVGUARD_REGENERABLE_PATHS": "packages/*/dist-types"}`. These names are read from that file only, so no other plugin takes them for its own option. The `CLAUDE_PLUGIN_OPTION_` spelling of 0.19.1 still works.
+
 ## [0.19.1] - 2026-11-16
 
 - Feature: a repository's own `.claude/settings.local.json` can now set Cyberine DevGuard options for that repository, as `"env": {"CLAUDE_PLUGIN_OPTION_OUTPUT_PATHS": "packages/*/dist-types"}`, while git ignores the file and has never tracked it (D63). Every option except `allow_danger_env` counts, and `output_paths` entries there may be relative. Before, such values could only make the guard stricter, so `output_paths` had to be set globally in `/config`.

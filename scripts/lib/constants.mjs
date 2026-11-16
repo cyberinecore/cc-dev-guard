@@ -1,5 +1,5 @@
 export const NAME = "cyberine-devguard";
-export const VERSION = "0.19.1";
+export const VERSION = "0.19.2";
 export const MODES = ["off", "warn", "deny-once", "ask"];
 export const DEFAULT_MODE = "ask";
 export const PROFILES = ["assist", "strict"];
@@ -10,4 +10,5 @@ export const PATH_KEYS = ["file_path", "notebook_path"];
 export const REPO_CONFIG_FILE = "cyberine-devguard.json";
 export const FALLBACK_MARKER_DIR = "cyberine-devguard-markers";
 export const OPTION_PREFIX = "CLAUDE_PLUGIN_OPTION_";
+export const LOCAL_OPTION_PREFIX = "CYBERINE_DEVGUARD_";
 export const NO_RM_PROMPT_ENV = "CLAUDE_CODE_EVEN_MORE_DANGEROUSLY_SKIP_PERMISSIONS";

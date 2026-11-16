@@ -483,9 +483,9 @@ export function dangerReason(command, { home = "", configDir = "", protectedBran
   return tagWriteShapeReason(command) || guardDepth(command, 0, opts);
 }
 
-export function dangerAskReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, isCacheDir = null, isRepoRoot = null, root = "", cwd = "", git = null, outputPaths = [], named = null } = {}) {
+export function dangerAskReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, isCacheDir = null, isRepoRoot = null, root = "", cwd = "", git = null, regenerablePaths = [], named = null } = {}) {
   if (typeof command !== "string" || command === "") return "";
-  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), isCacheDir, isRepoRoot, root, cwd, git, outputPaths, named };
+  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), isCacheDir, isRepoRoot, root, cwd, git, regenerablePaths, named };
   return guardDepth(command, 0, opts, subcommandAsk);
 }
 
@@ -606,10 +606,10 @@ function worktreeRemoveAsk(g, opts) {
 const reVaguePath = /[$`*?[]/;
 const CONSENT_NAME_MIN = 8;
 
-function outputPatterns(outputPaths, mainRoot) {
+function declaredPatterns(regenerablePaths, mainRoot) {
   const roots = [...new Set([slashed(mainRoot).replace(/\/+$/, ""), pathKey(mainRoot)])];
   const out = [];
-  for (const raw of outputPaths || []) {
+  for (const raw of regenerablePaths || []) {
     const s = slashed(raw).replace(/\/+$/, "");
     const root = roots.find((r) => s.startsWith(r + "/"));
     if (!root) continue;
@@ -631,11 +631,11 @@ function sharedFolder(dirs) {
   return shared.join("/");
 }
 
-function worktreeEntryLoss(entry, base, mainRoot, { git, outputPaths }) {
+function worktreeEntryLoss(entry, base, mainRoot, { git, regenerablePaths }) {
   const lost = [];
   const ignored = git.ignoredPaths(entry.path);
   if (!ignored) return { failed: "`git ls-files --ignored` failed" };
-  const patterns = outputPatterns(outputPaths, mainRoot);
+  const patterns = declaredPatterns(regenerablePaths, mainRoot);
   const declared = (x) => {
     const segs = x.replace(/\/+$/, "").split("/");
     return patterns.some((pat) => segs.length >= pat.length && pat.every((re, i) => re.test(segs[i])));
@@ -702,7 +702,7 @@ function consentLabel(entry, mainRoot) {
   return short.length >= CONSENT_NAME_MIN ? short : names[1] || names[0];
 }
 
-function worktreeLoss(p, g, { git, home, cwd, outputPaths = [], named = null }) {
+function worktreeLoss(p, g, { git, home, cwd, regenerablePaths = [], named = null }) {
   const what = `\`git worktree remove ${p}\``;
   if (g.gitDir) return probeFailed(what, "it names --git-dir or --work-tree");
   const base = gitBase(g, { cwd, home });
@@ -727,14 +727,14 @@ function worktreeLoss(p, g, { git, home, cwd, outputPaths = [], named = null }) 
   const mainRoot = list[0].path;
   const lossy = [];
   for (const entry of targets) {
-    const r = worktreeEntryLoss(entry, base, mainRoot, { git, outputPaths });
+    const r = worktreeEntryLoss(entry, base, mainRoot, { git, regenerablePaths });
     if (r.failed) return probeFailed(what, r.failed);
     if (r.lost.length) lossy.push({ entry, ...r });
   }
   if (!lossy.length) return "";
   if (named && lossy.every((l) => named(consentNames(l.entry, mainRoot)))) return "";
   const first = lossy[0];
-  const declare = first.folder ? ` If a folder listed here is build output, the user can declare it once in the plugin option output_paths (for example \`${slashed(mainRoot).replace(/\/+$/, "")}/${first.folder}\`), and it stops counting in every worktree of this repository.` : "";
+  const declare = first.folder ? ` If a folder listed here is build output, the user can declare it once in the plugin option regenerable_paths (for example \`${slashed(mainRoot).replace(/\/+$/, "")}/${first.folder}\`), and it stops counting in every worktree of this repository.` : "";
   const consent = named ? ` Under bypassPermissions the removal also passes once the user names the worktree in their prompt, or picks an AskUserQuestion option whose label names it (\`${consentLabel(first.entry, mainRoot)}\`).` : "";
   if (vague) {
     const more = lossy.length > 1 ? ` (and ${lossy.length - 1} more worktree${lossy.length === 2 ? "" : "s"} under that path hold work)` : "";

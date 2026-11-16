@@ -1,6 +1,6 @@
 import { lstatSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
-import { DEFAULT_MODE, DEFAULT_PROFILE, MODES, OPTION_PREFIX, PROFILES, REPO_CONFIG_FILE } from "./constants.mjs";
+import { DEFAULT_MODE, DEFAULT_PROFILE, LOCAL_OPTION_PREFIX, MODES, OPTION_PREFIX, PROFILES, REPO_CONFIG_FILE } from "./constants.mjs";
 import { DEFAULT_PROTECTED_BRANCHES } from "./dangerguard.mjs";
 import { makeGit } from "./git.mjs";
 
@@ -10,7 +10,7 @@ const optionPrefix = OPTION_PREFIX;
 
 export const DEFAULT_RELAUNCH_LIMIT = 10;
 
-const WIDENING_KEYS = new Set(["extraAllowedDirs", "extra_allowed_dirs", "hubRepos", "hub_repos", "outputPaths", "output_paths", "allowedDirs", "allowed_dirs", "additionalDirectories"]);
+const WIDENING_KEYS = new Set(["extraAllowedDirs", "extra_allowed_dirs", "hubRepos", "hub_repos", "regenerablePaths", "regenerable_paths", "outputPaths", "output_paths", "allowedDirs", "allowed_dirs", "additionalDirectories"]);
 
 export function defaultConfig() {
   return {
@@ -18,7 +18,7 @@ export function defaultConfig() {
     profile: DEFAULT_PROFILE,
     extraAllowedDirs: [],
     hubRepos: [],
-    outputPaths: [],
+    regenerablePaths: [],
     allowIgnored: true,
     allowIgnoredNestedRepos: true,
     logDecisions: false,
@@ -53,7 +53,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit", "output_paths"];
+export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit", "regenerable_paths", "output_paths"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -62,6 +62,7 @@ export function repoSetOptionKeys(sessionRoot) {
 
 const LOCAL_SETTINGS = [".claude", "settings.local.json"];
 const NEVER_FROM_LOCAL = new Set(["allow_danger_env"]);
+const REPO_RELATIVE_LISTS = ["regenerable_paths", "output_paths"];
 
 function settingsEnv(sessionRoot, file) {
   try {
@@ -85,11 +86,12 @@ function localSettingsAreTheUsers(sessionRoot, git) {
 export function localOptionValues(sessionRoot, git = null) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return {};
   const env = settingsEnv(sessionRoot, LOCAL_SETTINGS[1]);
-  const set = OPTION_KEYS.filter((k) => !NEVER_FROM_LOCAL.has(k) && typeof env[OPTION_PREFIX + k.toUpperCase()] === "string");
+  const valueOf = (k) => [LOCAL_OPTION_PREFIX, OPTION_PREFIX].map((prefix) => env[prefix + k.toUpperCase()]).find((v) => typeof v === "string");
+  const set = OPTION_KEYS.filter((k) => !NEVER_FROM_LOCAL.has(k) && valueOf(k) !== undefined);
   if (!set.length || !localSettingsAreTheUsers(sessionRoot, git || makeGit())) return {};
   const out = {};
-  for (const k of set) out[k] = env[OPTION_PREFIX + k.toUpperCase()];
-  if (out.output_paths !== undefined) out.output_paths = out.output_paths.split(",").map((s) => s.trim()).filter(Boolean).map((p) => (isAbsolute(p) ? p : join(sessionRoot, p))).join(",");
+  for (const k of set) out[k] = valueOf(k);
+  for (const k of REPO_RELATIVE_LISTS) if (out[k] !== undefined) out[k] = out[k].split(",").map((s) => s.trim()).filter(Boolean).map((p) => (isAbsolute(p) ? p : join(sessionRoot, p))).join(",");
   return out;
 }
 
@@ -288,7 +290,7 @@ export function loadConfig({ env = {}, sessionRoot, git = null } = {}) {
   }
   c.extraAllowedDirs = parseDirList(option(env, "extra_allowed_dirs"), "extra_allowed_dirs", w);
   c.hubRepos = parseDirList(option(env, "hub_repos"), "hub_repos", w);
-  c.outputPaths = parseDirList(option(env, "output_paths"), "output_paths", w);
+  c.regenerablePaths = [...parseDirList(option(env, "regenerable_paths"), "regenerable_paths", w), ...parseDirList(option(env, "output_paths"), "output_paths", w)];
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
   c.allowIgnoredNestedRepos = parseBool(option(env, "allow_ignored_nested_repos"), "allow_ignored_nested_repos", true, w);
   c.logDecisions = parseBool(option(env, "log_decisions"), "log_decisions", false, w);
