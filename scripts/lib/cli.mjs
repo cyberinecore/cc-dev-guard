@@ -181,7 +181,7 @@ function bashHook(input, env, deps, now) {
   if (!writes.length && !worktree) return null;
   if (config.mode === "off") return null;
   if (worktree && config.worktreeGuard) {
-    const out = renderWorktree(judgeWorktreeAdds(command, { cwd, home, git }), { mode: config.mode, input, warnings: config.warnings, profile: config.profile });
+    const out = renderWorktree(judgeWorktreeAdds(command, { cwd, home, git, env }), { mode: config.mode, input, warnings: config.warnings, profile: config.profile, now, markerDir: markerDirFor(env), bypassStrict: config.bypassStrict });
     if (out) return out;
   }
   if (!config.bashGuard) return null;

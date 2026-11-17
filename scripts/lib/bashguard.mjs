@@ -9,6 +9,10 @@ const ADD_VALUE_OPTIONS = new Set(["-b", "-B", "--reason"]);
 
 export const WORKTREES_DIR = join(".claude", "worktrees");
 
+const SCRATCH_VARS = ["CLAUDE_JOB_DIR", "TMPDIR"];
+const SCRATCH_ROOTS = ["/tmp", "/private/tmp", "/var/tmp", "/private/var/tmp"];
+const FOLDERS_TEMP = /^\/(?:private\/)?var\/folders\/[^/]+\/[^/]+\/T\/./;
+
 export function mentionsWorktree(command) {
   return typeof command === "string" && command.includes("worktree");
 }
@@ -175,7 +179,21 @@ function isGitWord(w) {
   return !w.dynamic && (w.text === "git" || /[\\/]git(\.exe)?$/.test(w.text));
 }
 
-function worktreeAddTarget(words, cwd, home) {
+function scratchVarValue(word, command, env) {
+  if (!word?.dynamic || !env) return null;
+  for (const name of SCRATCH_VARS) {
+    const m = new RegExp(`^(?:\\$${name}|\\$\\{${name}\\})(/[^$\`]*)?$`).exec(word.text);
+    if (!m) continue;
+    const value = env[name];
+    if (typeof value !== "string" || !isAbsolute(value)) return null;
+    const rest = command.replace(new RegExp(`\\$\\{${name}\\}|\\$${name}\\b`, "g"), "");
+    if (rest.includes(name)) return null;
+    return resolve(value, "." + (m[1] || ""));
+  }
+  return null;
+}
+
+function worktreeAddTarget(words, cwd, home, scratch) {
   let gitCwd = cwd;
   let pending = "";
   let i = 1;
@@ -206,6 +224,7 @@ function worktreeAddTarget(words, cwd, home) {
   if (pending) return { unresolved: pending };
   for (i++; i < words.length; i++) {
     const w = words[i];
+    if (w.dynamic && scratch && scratchVarValue(w, scratch.command, scratch.env) !== null) break;
     if (w.dynamic) return { unresolved: "the worktree path", gitCwd };
     const t = w.text;
     if (t === "--") {
@@ -218,7 +237,8 @@ function worktreeAddTarget(words, cwd, home) {
   const pathWord = words[i];
   if (!pathWord) return null;
   if (gitCwd === null) return { unresolved: "the working directory" };
-  const target = resolveWord(pathWord, gitCwd, home);
+  const fromVar = scratch ? scratchVarValue(pathWord, scratch.command, scratch.env) : null;
+  const target = fromVar ?? resolveWord(pathWord, gitCwd, home);
   if (target === null) return { unresolved: "the worktree path", gitCwd };
   return { target, gitCwd };
 }
@@ -263,11 +283,11 @@ export function parseCommands(command, { cwd, home }) {
   return out;
 }
 
-export function findWorktreeAdds(command, { cwd, home }) {
+export function findWorktreeAdds(command, { cwd, home, env }) {
   const found = [];
   for (const seg of parseCommands(command, { cwd, home })) {
     if (!seg.words.length || !isGitWord(seg.words[0])) continue;
-    const hit = worktreeAddTarget(seg.words, seg.dir, home);
+    const hit = worktreeAddTarget(seg.words, seg.dir, home, { command, env });
     if (hit) found.push(hit);
   }
   return found;
@@ -392,8 +412,20 @@ export function findWrites(command, { cwd, home }) {
   return found;
 }
 
-export function judgeWorktreeAdds(command, { cwd, home, git }) {
-  for (const hit of findWorktreeAdds(command, { cwd, home })) {
+export function isScratchPath(target, env = {}) {
+  const real = resolveDir(target);
+  if (!real) return false;
+  if (FOLDERS_TEMP.test(real)) return true;
+  const roots = [...SCRATCH_ROOTS, env.TMPDIR, env.CLAUDE_JOB_DIR].filter((r) => typeof r === "string" && isAbsolute(r) && r !== "/");
+  return roots.some((r) => {
+    const root = resolveDir(r);
+    return root && root !== real && isUnder(real, root);
+  });
+}
+
+export function judgeWorktreeAdds(command, { cwd, home, git, env = {} }) {
+  let scratchOnly = null;
+  for (const hit of findWorktreeAdds(command, { cwd, home, env })) {
     if (hit.unresolved) return { action: "cross", why: "worktree-unresolved", detail: hit.unresolved, target: hit.target || "" };
     const root = git.mainRoot(hit.gitCwd);
     if (!root) continue;
@@ -404,7 +436,9 @@ export function judgeWorktreeAdds(command, { cwd, home, git }) {
       if (!host) continue;
       return { action: "cross", why: "worktree-nested", target: hit.target, root, worktreesDir, host: host.path };
     }
-    return { action: "cross", why: "worktree-outside", target: hit.target, root, worktreesDir };
+    const verdict = { action: "cross", why: "worktree-outside", target: hit.target, root, worktreesDir };
+    if (!isScratchPath(target, env)) return verdict;
+    scratchOnly ||= { ...verdict, scratch: true };
   }
-  return { action: "pass", why: "no-stray-worktree" };
+  return scratchOnly || { action: "pass", why: "no-stray-worktree" };
 }
