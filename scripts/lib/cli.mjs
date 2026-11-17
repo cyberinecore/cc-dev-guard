@@ -8,6 +8,7 @@ import { FALLBACK_MARKER_DIR, NAME, NO_RM_PROMPT_ENV, VERSION } from "./constant
 
 const pluginName = NAME;
 const version = VERSION;
+import { commandAllowed, isExemptApp } from "./allowlist.mjs";
 import { allowedDirsFor, decide, sessionRootOf } from "./decide.mjs";
 import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
@@ -167,11 +168,12 @@ function bashHook(input, env, deps, now) {
   const home = env.HOME || env.USERPROFILE || "";
   const config = loadConfig({ env, sessionRoot });
   const git = deps.git || makeGit();
-  const danger = dangerCheck(command, input, { env, config, sessionRoot, home, cwd, now, git });
+  const allowed = commandAllowed(command, config.allowCommands);
+  const danger = allowed ? null : dangerCheck(command, input, { env, config, sessionRoot, home, cwd, now, git });
   if (danger) return logGuard(env, config, input, "danger", danger, now), danger;
-  const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
+  const live = allowed ? null : liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
   if (live && live.hookSpecificOutput?.permissionDecision === "deny") return logGuard(env, config, input, "live", live, now), live;
-  const dangerAsk = dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd, git });
+  const dangerAsk = allowed ? null : dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd, git });
   if (dangerAsk) return logGuard(env, config, input, "danger", dangerAsk, now), dangerAsk;
   if (live) return logGuard(env, config, input, "live", live, now), live;
   const writes = findWrites(command, { cwd, home });
@@ -258,7 +260,7 @@ function liveCommandCheck(command, input, ctx) {
   let finding = result.finding;
   if (result.created.length || result.launches.length) {
     for (const name of result.created) if (!state.owned.includes(name)) state.owned.push(name);
-    const counts = countLaunches(state, result.launches, now);
+    const counts = countLaunches(state, result.launches.filter((app) => !isExemptApp(app, config.relaunchExemptApps)), now);
     saveLiveState(dir, input.session_id, state, now);
     const over = config.relaunchLimit > 0 ? counts.find((c) => c.count > config.relaunchLimit) : null;
     if (over && finding?.level !== "deny") finding = { level: "ask", hard: true, key: `relaunch:${over.app}`, reason: `\`${over.app}\` has been launched or brought to the front ${over.count} times by this session in the last ${RELAUNCH_WINDOW_MS / 60000} minutes (relaunch_limit ${config.relaunchLimit}). Each relaunch takes focus and interrupts the user; check the app another way (logs, a test, a screenshot of a window you own) or ask the user.` };
@@ -370,6 +372,8 @@ function describeSession(opts, env) {
     `session hint: ${config.dangerGuard && config.sessionHint}`,
     `danger guard: ${config.dangerGuard}${config.dangerGuard ? ` (aws s3 deletes: ${config.denyAwsS3Deletes}; escape: ${[ESCAPE_ENV, config.allowDangerEnv].filter(Boolean).join(" or ")}=1)` : ""}`,
     `live guard: ${config.liveGuard}${config.liveGuard ? ` (desktop: ${config.liveGuardDesktop}; relaunch limit: ${config.relaunchLimit || "off"})` : ""}`,
+    `allowed commands: ${config.allowCommands.length}`,
+    `relaunch exempt apps: ${config.relaunchExemptApps.join(", ") || "none"}`,
     `protected branches: ${config.protectedBranches.join(", ") || "none"}`,
     `extra allowed dirs: ${config.extraAllowedDirs.join(", ") || "none"}`,
     `hub repos: ${config.hubRepos.join(", ") || "none"}`,

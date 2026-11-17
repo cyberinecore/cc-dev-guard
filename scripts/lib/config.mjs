@@ -1,6 +1,7 @@
 import { lstatSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { DEFAULT_MODE, DEFAULT_PROFILE, LOCAL_OPTION_PREFIX, MODES, OPTION_PREFIX, PROFILES, REPO_CONFIG_FILE } from "./constants.mjs";
+import { parseAllowCommands, parseAppList } from "./allowlist.mjs";
 import { DEFAULT_PROTECTED_BRANCHES } from "./dangerguard.mjs";
 import { makeGit } from "./git.mjs";
 import { realPathOr } from "./paths.mjs";
@@ -31,6 +32,8 @@ export function defaultConfig() {
     liveGuard: true,
     liveGuardDesktop: false,
     relaunchLimit: DEFAULT_RELAUNCH_LIMIT,
+    relaunchExemptApps: [],
+    allowCommands: [],
     sessionHint: true,
     bypassStrict: false,
     protectedBranches: [...DEFAULT_PROTECTED_BRANCHES],
@@ -54,7 +57,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit", "regenerable_paths", "output_paths"];
+export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit", "regenerable_paths", "output_paths", "allow_commands", "relaunch_exempt_apps"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -62,7 +65,8 @@ export function repoSetOptionKeys(sessionRoot) {
 }
 
 const LOCAL_SETTINGS = [".claude", "settings.local.json"];
-const NEVER_FROM_LOCAL = new Set(["allow_danger_env"]);
+const NEVER_FROM_LOCAL = new Set(["allow_danger_env", "allow_commands"]);
+const USER_ONLY_FILE_KEYS = new Map([["allowCommands", "exempt commands from the guards"], ["allow_commands", "exempt commands from the guards"], ["relaunchExemptApps", "exempt apps from the relaunch budget"], ["relaunch_exempt_apps", "exempt apps from the relaunch budget"]]);
 const REPO_RELATIVE_LISTS = ["regenerable_paths", "output_paths"];
 
 function settingsEnv(root, file) {
@@ -136,6 +140,12 @@ export function localOptionValues(sessionRoot, git = null) {
   const main = g.mainRoot(sessionRoot);
   if (!main || main === realPathOr(sessionRoot)) return own;
   return { ...trustedOptionEntries(main, g), ...own };
+}
+
+function ignoredLocalOnlyWarnings(sessionRoot) {
+  if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
+  const env = settingsEnv(sessionRoot, LOCAL_SETTINGS[1]);
+  return [...NEVER_FROM_LOCAL].filter((k) => typeof env[LOCAL_OPTION_PREFIX + k.toUpperCase()] === "string").map((k) => `${LOCAL_OPTION_PREFIX}${k.toUpperCase()} in .claude/settings.local.json is ignored: ${k} can only be set in /config`);
 }
 
 export function repoSetsEnv(sessionRoot, name) {
@@ -295,6 +305,8 @@ function applyRepoFile(c, file) {
       else if (value === false) {
         if (c.isolateWorktrees) w.push(`${where} isolateWorktrees false is ignored: a repository file can only make the guard stricter`);
       } else w.push(`${where} isolateWorktrees must be true or false; ignored`);
+    } else if (USER_ONLY_FILE_KEYS.has(optionName)) {
+      w.push(`${where} ${optionName} is ignored: a repository file cannot ${USER_ONLY_FILE_KEYS.get(optionName)}`);
     } else if (WIDENING_KEYS.has(optionName)) {
       w.push(`${where} ${optionName} is ignored: a repository file cannot widen what the session may write`);
     } else {
@@ -308,6 +320,7 @@ export function loadConfig({ env = {}, sessionRoot, git = null } = {}) {
   const w = c.warnings;
   const local = localOptionValues(sessionRoot, git);
   c.localOptions = Object.keys(local);
+  w.push(...ignoredLocalOnlyWarnings(sessionRoot));
   const untrusted = repoSetOptionKeys(sessionRoot).filter((k) => !(k in local));
   if (c.localOptions.length) {
     env = { ...env };
@@ -345,6 +358,8 @@ export function loadConfig({ env = {}, sessionRoot, git = null } = {}) {
   c.liveGuard = parseBool(option(env, "live_guard"), "live_guard", true, w);
   c.liveGuardDesktop = parseBool(option(env, "live_guard_desktop"), "live_guard_desktop", false, w);
   c.relaunchLimit = parseLimit(option(env, "relaunch_limit"), "relaunch_limit", DEFAULT_RELAUNCH_LIMIT, w);
+  c.relaunchExemptApps = parseAppList(option(env, "relaunch_exempt_apps"));
+  c.allowCommands = parseAllowCommands(option(env, "allow_commands"), "allow_commands", w);
   c.sessionHint = parseBool(option(env, "session_hint"), "session_hint", true, w);
   c.denyAwsS3Deletes = parseBool(option(env, "deny_aws_s3_deletes"), "deny_aws_s3_deletes", true, w);
   c.bypassStrict = parseBool(option(env, "bypass_strict"), "bypass_strict", false, w);
