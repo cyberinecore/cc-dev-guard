@@ -31,7 +31,17 @@ export function describeDirs(dirs) {
   return shown.join(", ") + (extra > 0 ? ` and ${extra} more` : "");
 }
 
+const APPROVE_SENTENCE = /\s*Approve only if [^.]*\./g;
+
+function withoutApprove(text) {
+  return text.replace(APPROVE_SENTENCE, "").trim();
+}
+
 function scopeText(v) {
+  if (insideWorkingDir(v) && !(v.allowed && !v.allowed.ok)) {
+    const note = v.allowed?.transcriptReason ? `; the transcript could not be read (${v.allowed.transcriptReason}), so the list comes from settings, /add-dir and --add-dir` : "";
+    return `a separate repository inside this session's working directory \`${v.sessionRoot}\`, not covered by the session's repository \`${v.sessionTop}\` or its allowed directories (${describeDirs(v.allowed?.dirs)}${note})`;
+  }
   const repo = v.sessionTop ? `\`${v.sessionTop}\`` : "this session's repository";
   if (v.allowed && !v.allowed.ok) return `outside this session's repository ${repo}, and the session's allowed directories could not be read (${v.allowed.reason})`;
   const note = v.allowed?.transcriptReason ? `; the transcript could not be read (${v.allowed.transcriptReason}), so the list comes from settings, /add-dir and --add-dir` : "";
@@ -147,7 +157,7 @@ const settingsOnceNote = `The user's current prompt names neither this file nor 
 const bypassOnceNote = `This session runs with bypassPermissions, where no prompt reaches the user, so ${pluginName} holds the first write to that repository and lets a retry through; the user can turn on the bypass_strict option to keep every such write denied.`;
 
 function askOrDeny(input, what, approve, warnings = []) {
-  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${what} ${bypassNote}`, warnings));
+  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${withoutApprove(what)} ${bypassNote}`, warnings));
   return decision("ask", withWarnings(approve ? `${what} ${approve}` : what, warnings));
 }
 
@@ -196,7 +206,7 @@ export function render(v, { mode, input, now = Date.now(), markerDir, warnings =
 }
 
 export function dangerDenyReason(reason, escapeName) {
-  return `${pluginName}: ${reason} ${pluginName} denies this in every permission mode. Hand the exact command to the user to run themselves, or the user starts the session with ${escapeName}=1.`;
+  return `${pluginName}: ${withoutApprove(reason)} ${pluginName} denies this in every permission mode. Hand the exact command to the user to run themselves, or the user starts the session with ${escapeName}=1.`;
 }
 
 function renderUncertain(reason, { input, escapeName, warnings, now, markerDir, bypassStrict, key }) {
@@ -204,7 +214,7 @@ function renderUncertain(reason, { input, escapeName, warnings, now, markerDir, 
   if (!isBypass(input)) return decision("ask", withWarnings(`${pluginName}: ${reason} ${pluginName} could not prove this loses data, so it asks instead of denying. Approve only if you expected it.`, warnings));
   if (bypassStrict) return decision("deny", withWarnings(dangerDenyReason(reason, escapeName), warnings));
   if (!firstTry(`danger\u0000${key}`, { input, now, markerDir })) return null;
-  return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${reason} ${pluginName} could not prove this loses data. Check the target first (print the variable, or write the literal path); retry the same command only if it is what you meant. (${pluginName} deny-once under bypassPermissions: the same command retried within ${retryMinutes} minutes passes; the bypass_strict option or profile strict keeps it denied.)`, warnings));
+  return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${withoutApprove(reason)} ${pluginName} could not prove this loses data. Check the target first (print the variable, or write the literal path); retry the same command only if it is what you meant. (${pluginName} deny-once under bypassPermissions: the same command retried within ${retryMinutes} minutes passes; the bypass_strict option or profile strict keeps it denied.)`, warnings));
 }
 
 function uncertainKey(input) {
@@ -218,7 +228,7 @@ export function renderDanger(reason, { input, escapeName, warnings = [], profile
 
 export function renderDangerAsk(reason, { input, escapeName, warnings = [], profile = "assist", now = Date.now(), markerDir, bypassStrict = false } = {}) {
   if (profile !== "strict" && isUncertainDanger(reason)) return renderUncertain(reason, { input, escapeName, warnings, now, markerDir, bypassStrict, key: uncertainKey(input) });
-  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${pluginName}: ${reason} This session runs with bypassPermissions, where no prompt reaches the user, so danger_guard denies it. Take the safer route named above, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
+  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${pluginName}: ${withoutApprove(reason)} This session runs with bypassPermissions, where no prompt reaches the user, so danger_guard denies it. Take the safer route named above, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
   return decision("ask", withWarnings(`${pluginName}: ${reason}`, warnings));
 }
 
@@ -242,6 +252,7 @@ export function renderWorktree(v, { mode, input, warnings = [], profile = "assis
   if (mode === "ask" && defersToAuto(profile, input)) return null;
   const reason = withWarnings(worktreeReason(v), warnings);
   if (mode === "warn") return { systemMessage: `${pluginName} (warn mode): ${reason}` };
+  if (isBypass(input)) return decision("deny", withWarnings(`${withoutApprove(worktreeReason(v))} This session runs with bypassPermissions, where no prompt reaches the user, so ${pluginName} denies it. Create the worktree under the repository's \`.claude/worktrees/\` (or through the Agent tool's isolation "worktree" or EnterWorktree), or hand the exact \`git worktree add\` command to the user to run themselves.`, warnings));
   return askOrDeny(input, reason);
 }
 
@@ -252,9 +263,9 @@ export function renderLive(f, { input, now = Date.now(), markerDir, warnings = [
     return decision("deny", withWarnings(`${pluginName}: ${f.reason} live_guard denies this in every permission mode, because it disrupts the user's running machine beyond this session's own work. Stop only a process this session started, by its PID, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
   }
   if (input?.permission_mode === "bypassPermissions") {
-    if (f.hard || bypassStrict) return decision("deny", withWarnings(`${pluginName}: ${f.reason} This session runs with bypassPermissions, where no prompt reaches the user, so live_guard denies it. Report the command to the user instead of running it another way.`, warnings));
+    if (f.hard || bypassStrict) return decision("deny", withWarnings(`${pluginName}: ${withoutApprove(f.reason)} This session runs with bypassPermissions, where no prompt reaches the user, so live_guard denies it. Report the command to the user instead of running it another way.`, warnings));
     if (!firstTry(`live\u0000${f.key}`, { input, now, markerDir })) return null;
-    return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${f.reason} Retry only if the user explicitly asked for this command this turn; otherwise report it to the user instead. (${pluginName} live_guard deny-once under bypassPermissions: a retry within ${retryMinutes} minutes passes.)`, warnings));
+    return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${withoutApprove(f.reason)} Retry only if the user explicitly asked for this command this turn; otherwise report it to the user instead. (${pluginName} live_guard deny-once under bypassPermissions: a retry within ${retryMinutes} minutes passes.)`, warnings));
   }
   return decision("ask", withWarnings(`${pluginName}: ${f.reason} It changes the user's running machine outside this session's own work. Approve only if you asked for it.`, warnings));
 }

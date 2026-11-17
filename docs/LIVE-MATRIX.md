@@ -224,3 +224,14 @@ Fixture location matters: fixtures under `$CLAUDE_JOB_DIR/tmp` pass as Claude Co
 | Bash overlap | `cp`, `mv` over an untracked file inside the session repository under bypass | ran with and without devguard | Claude Code's new cp/mv ask did not fire here; devguard does not guard these |
 | Bash overlap | `cp` into another repository, `acceptEdits` and `--allowedTools Bash` | ran without devguard; denied by devguard ("written by a Bash cp") | unchanged |
 | Bash overlap | a command Claude Code cannot parse (`${(f)P}`, zsh parameter flags) | refused by Claude Code: "can't be sure it read this command the way the shell will, so it can't rule out a dangerous removal", with and without devguard | new in 2.1.326; interactive sessions get the same prompt with a countdown to an automatic block |
+
+## Plan mode inside a bypass session (task kxfrg)
+
+2.1.326 (Claude Code), model haiku, 2026-11-18, headless `claude -p` with a logging probe plugin (a PreToolUse hook on Write and Edit that records `permission_mode` and answers `ask`), session in repository `a`, targets in repository `b`, both under a `mktemp -d` dir in `/tmp`. Four runs.
+
+| row | flags | permission_mode in the hook input | result |
+|---|---|---|---|
+| plan-in-bypass-flag-order | `--dangerously-skip-permissions --permission-mode plan` | `bypassPermissions` (the plan flag is ignored) | the hook's `ask` on `b/.claude/x.md` let the Write through (written); `b/plain.txt` held. Same as the other-repo-dot-claude-bypass row |
+| plan-in-bypass-allow-flag | `--allow-dangerously-skip-permissions --permission-mode plan` | `plan` | Claude Code does not pass the hook's `ask` through: Write to `b/.claude/z.md` answered "Claude requested permissions to edit ... which is a sensitive file", Write to `b/plain3.txt` answered "probe ask"; neither file was written |
+
+The model also declined to attempt a cross-repository Write in plan mode when asked normally ("plan mode blocks every edit"), and its Write to the plan file under `~/.claude/plans/` was refused because the path is a symlink outside the working directories. Plan mode therefore does not behave like bypass for an `ask`: the safety-check paths that pass through under bypass are held in plan mode, so no `output.mjs` change is needed (devguard keeps answering `ask` there). Limits: the interactive switch (Shift+Tab from a `--dangerously-skip-permissions` session) cannot be driven headlessly; the `--allow-dangerously-skip-permissions` run is the closest reachable state, and the hook input there reports `plan`.
