@@ -96,6 +96,14 @@ const GIT_TEXT_SUBCOMMANDS =new Set(["log", "grep", "show", "diff", "blame"]);
 const WRAPPER_BINS = new Set(["ssh", "bash", "sh", "zsh", "eval", "xargs", "sudo", "nohup", "timeout", "gtimeout", "caffeinate", "env", "script"]);
 const QUOTED_ARG_BINS = new Set(["git", "gh", "glab", "jira", "linear", "curl", "cyberine"]);
 const HEREDOC_SINK_BINS = new Set(["cat", "tee"]);
+const DATA_READER_BINS = new Set(["cat", "head", "tail", "wc", "sort", "uniq", "cut", "tr", "diff", "comm", "column", "fold", "nl", "od", "xxd", "grep", "rg", "egrep", "fgrep", "ugrep", "tee", "jq", "yq", "base64", "shasum", "sha1sum", "sha256sum", "md5sum", "md5", "cksum", "rev", "paste", "pr", "fmt", "expand", "unexpand", "pbcopy", "xclip", "wl-copy", "cyberine", "amemoria", "gh", "glab", "jira", "linear", "curl"]);
+const GIT_STDIN_SUBCOMMANDS = new Set(["commit", "tag", "notes", "hash-object", "apply", "am", "stripspace", "interpret-trailers", "fast-import", "mktag", "mktree"]);
+const PY_SAFE_MODULES = new Set(["pathlib", "textwrap", "json", "re", "string", "datetime", "collections", "itertools", "functools", "typing", "dataclasses", "sys", "io", "math", "base64", "hashlib", "shlex", "stat", "time", "fnmatch", "os"]);
+const PY_FLAGS = new Set(["-", "-u", "-B", "-E", "-I", "-s", "-S", "-O", "-OO", "-q"]);
+const rePyBanned = /\b(?:system|popen|spawn\w*|exec\w*|eval|fork\w*|subprocess|getattr|setattr|delattr|vars|globals|locals|builtins|importlib|breakpoint|modules|ctypes|pty|kill\w*|remove\w*|unlink|rmdir|rmtree|startfile)\b|(?<![\w.])compile\s*\(|\.\s*f?truncate\s*\(/;
+const rePyAllowedDunder = /__(?:name|main|file)__/g;
+const rePipeOp = /^\|(?!\|)/;
+const BINDING_BUILTINS = new Set(["export", "declare", "typeset", "readonly", "local", "read", "unset"]);
 
 const fields = (s) => s.split(/\s+/).filter(Boolean);
 const baseName = (p) => {
@@ -331,6 +339,42 @@ function firstBin(sub) {
   return [baseName(toks[0]), toks];
 }
 
+function commandTokens(sub) {
+  let toks = fields(sub);
+  while (toks.length && (isAssignment(toks[0]) || TEXT_PREFIX_BINS.has(toks[0]) || (toks[0] === "-p" && toks.length > 1))) toks = toks.slice(1);
+  return toks;
+}
+
+function isDataReader(sub) {
+  const toks = commandTokens(sub);
+  if (!toks.length) return false;
+  const bin = baseName(toks[0]);
+  if (bin !== "git") return DATA_READER_BINS.has(bin);
+  const rest = toks.slice(1);
+  if (rest.some((t) => t === "-c" || t === "--exec-path" || t.startsWith("--exec-path=") || t === "--config-env" || t.startsWith("--config-env="))) return false;
+  const sub1 = rest.find((t) => !t.startsWith("-"));
+  return sub1 !== undefined && GIT_STDIN_SUBCOMMANDS.has(sub1);
+}
+
+function isFeeder(sub) {
+  const toks = commandTokens(sub);
+  if (!toks.length) return false;
+  const bin = baseName(toks[0]);
+  return bin === "echo" || bin === "printf" || (TEXT_TOOLS.has(bin) && sub.includes("<<<"));
+}
+
+function pipedInto(segments, k) {
+  const out = [];
+  for (let j = k + 1; j < segments.length && rePipeOp.test(segments[j].op); j++) out.push(segments[j].text);
+  return out;
+}
+
+function pipeAfterIsReaderOnly(after) {
+  if (!after.includes("|")) return true;
+  const parts = splitSegments(after);
+  return parts.length > 0 && parts.every((p) => rePipeOp.test(p.op) && isDataReader(p.text));
+}
+
 function isWrapper(sub) {
   const [bin, toks] = firstBin(sub);
   if (!bin) return false;
@@ -425,16 +469,39 @@ export function unquotedAt(line, index) {
 function heredocSinkOnly(line, m) {
   const before = line.slice(0, m.index);
   const after = line.slice(m.index + m[0].length);
-  if (!unquotedAt(line, m.index)) return false;
-  if (/[<>]\(/.test(line) || /\\\s*$/.test(line) || /\|/.test(after)) return false;
-  if ([...line.matchAll(reHeredoc)].length !== 1) return false;
+  if (!unquotedAt(line, m.index)) return "";
+  if (/[<>]\(/.test(line) || /\\\s*$/.test(line) || !pipeAfterIsReaderOnly(after)) return "";
+  if ([...line.matchAll(reHeredoc)].length !== 1) return "";
   const sub = before.lastIndexOf("$(");
   const cut = Math.max(sub, before.lastIndexOf("|"), before.lastIndexOf(";"), before.lastIndexOf("&"));
-  if (!HEREDOC_SINK_BINS.has(leadingBin(before.slice(cut + 1).replace(/^\(/, "")))) return false;
-  if (cut !== sub || sub < 0) return true;
+  const head = before.slice(cut + 1).replace(/^\(/, "");
+  if (isPythonStdinCommand(head)) return !after.includes("|") && sub < 0 && !before.includes("`") && m[2] !== "" ? "python" : "";
+  if (!HEREDOC_SINK_BINS.has(leadingBin(head))) return "";
+  if (cut !== sub || sub < 0) return "text";
   const outer = before.slice(0, sub);
   const outerCut = Math.max(outer.lastIndexOf("$("), outer.lastIndexOf("|"), outer.lastIndexOf(";"), outer.lastIndexOf("&"));
-  return outerCut < 0 && leadingBin(outer) === "git";
+  return outerCut < 0 && leadingBin(outer) === "git" ? "text" : "";
+}
+
+function isPythonStdinCommand(text) {
+  let toks = fields(text);
+  while (toks.length && GROUP_OPENERS.has(toks[0])) toks = toks.slice(1);
+  if (!toks.length || !/^python(?:3(?:\.\d+)?)?$/.test(baseName(toks[0]))) return false;
+  return toks.slice(1).every((t) => PY_FLAGS.has(t));
+}
+
+function pythonBodyIsData(body) {
+  const text = body.join("\n");
+  if (rePyBanned.test(text) || text.replace(rePyAllowedDunder, "").includes("__")) return false;
+  const modules = [];
+  const rest = text.replace(/(?:^|[;\s])from\s+([\w.]+)\s+import\b/g, (_, mod) => {
+    modules.push(mod);
+    return " ";
+  });
+  for (const m of rest.matchAll(/(?:^|[;\s])import\s+([\w., ]+)/g)) {
+    for (const part of m[1].split(",")) modules.push(part.trim().split(/\s+/)[0]);
+  }
+  return modules.every((mod) => PY_SAFE_MODULES.has(mod.split(".")[0]));
 }
 
 const GROUP_OPENERS = new Set(["{", "(", "!", "then", "do", "else"]);
@@ -452,7 +519,8 @@ export function stripTextHeredocs(cmd) {
     const line = lines[i];
     out.push(line);
     const docs = [...line.matchAll(reHeredoc)];
-    if (docs.length !== 1 || !heredocSinkOnly(line, docs[0])) continue;
+    const sink = docs.length === 1 ? heredocSinkOnly(line, docs[0]) : "";
+    if (!sink) continue;
     const m = docs[0];
     const delimiter = m[3];
     let end = -1;
@@ -464,6 +532,7 @@ export function stripTextHeredocs(cmd) {
     }
     if (end < 0) continue;
     const body = lines.slice(i + 1, end);
+    if (sink === "python" && !pythonBodyIsData(body)) continue;
     if (!m[2] && body.some((l) => l.includes("$(") || l.includes("`"))) continue;
     out.push(lines[end]);
     i = end;
@@ -866,6 +935,115 @@ export function isUncertainDanger(reason) {
 const HEREDOC_NOTE = " The match is in a heredoc body fed to an interpreter; if that text is data written into a file, write the file with a plain cat heredoc first.";
 const QUOTED_NOTE = (bin) => ` The match is inside a quoted string handed to \`${bin}\`, which runs it as a command.`;
 
+function dataAssignments(text) {
+  const { words, ok } = shellWords(text);
+  if (!ok || !words.length) return null;
+  const out = [];
+  for (const w of words) {
+    const m = reAssignWord.exec(w.raw);
+    if (!m) return null;
+    if (/\$\(|`|^\(|<\(|>\(/.test(w.raw.slice(m[0].length))) return null;
+    out.push({ name: m[1], value: w.value.slice(m[0].length) });
+  }
+  return out;
+}
+
+function expandDataVars(text, vars) {
+  let out = text;
+  for (const [name, value] of vars) {
+    out = out.replace(new RegExp(String.raw`\$(?:\{${name}\}|${name}(?!\w))`, "g"), () => value);
+    if (new RegExp(String.raw`\$\{[#!]?${name}(?!\w)`).test(out)) return null;
+  }
+  return vars.size && /\$\{!/.test(out) ? null : out;
+}
+
+function unfollowableUse(text, vars) {
+  const [bin] = firstBin(text);
+  if (!BINDING_BUILTINS.has(bin)) return "";
+  for (const name of vars.keys()) if (mentionsName(text, name)) return name;
+  return "";
+}
+
+const reLoopStart = /^\s*(?:while|until|for)\b/;
+const reLoopEnd = /^\s*done\b/;
+const reFindSubstitution = /(?:\$\(|`|<\()\s*(?:sudo\s+)?(?:[^\s;&|`)]*\/)?find\s+([^)`\n;&|]*)/g;
+const reFindSubstitutionWord = /^"?(?:\$\(|`)\s*(?:sudo\s+)?(?:[^\s;&|`)]*\/)?find\s/;
+const reXargsRm = /(?:^|[\s'"/])(?:rm|unlink)(?=[\s'"]|$)/;
+
+function pipeHead(segments, k) {
+  let j = k;
+  while (j > 0 && rePipeOp.test(segments[j].op)) j--;
+  return j;
+}
+
+function findToks(text) {
+  let toks = fields(text);
+  while (toks.length && (isAssignment(toks[0]) || toks[0] === "sudo" || GROUP_OPENERS.has(toks[0]))) toks = toks.slice(1);
+  return toks.length && baseName(toks[0]) === "find" ? toks.slice(1) : null;
+}
+
+function readTargets(head) {
+  const f = /^\s*for\s+(\w+)\s+in\b/.exec(head);
+  if (f) return [f[1]];
+  const r = /\bread\b([^\n;&|<>]*)/.exec(head);
+  if (!r) return null;
+  const toks = fields(r[1]);
+  const names = [];
+  for (let i = 0; i < toks.length; i++) {
+    if (toks[i].startsWith("-")) {
+      if (/^-[a-zA-Z]*[dunNpt]$/.test(toks[i])) i++;
+      continue;
+    }
+    if (/^\w+$/.test(toks[i])) names.push(toks[i]);
+  }
+  return names.length ? names : ["REPLY"];
+}
+
+function removesVar(texts, names) {
+  const refs = names ? new RegExp(String.raw`\$\{?(?:${names.join("|")})(?!\w)`) : /[$`]/;
+  for (const t of texts) {
+    for (const call of rmCalls(t)) if (call.targets.some((w) => refs.test(w.raw))) return true;
+    const u = /(?:^|[\s;(){}])unlink\s+(\S+)/.exec(t);
+    if (u && refs.test(u[1])) return true;
+  }
+  return false;
+}
+
+function loopDeleteReason(segments, vars, opts) {
+  const hits = [];
+  const stack = [];
+  for (let k = 0; k < segments.length; k++) {
+    const text = segments[k].text;
+    if (reLoopStart.test(text)) stack.push(k);
+    else if (reLoopEnd.test(text) && stack.length) {
+      const start = stack.pop();
+      const region = segments.slice(start, k + 1).map((s) => s.text);
+      if (!removesVar(region, readTargets(segments[start].text))) continue;
+      const found = [];
+      const h = pipeHead(segments, start);
+      if (h !== start && findToks(segments[h].text)) found.push({ toks: findToks(segments[h].text), idx: h });
+      for (const t of [segments[start].text, text]) for (const m of t.matchAll(reFindSubstitution)) found.push({ toks: fields(m[1]), idx: start });
+      for (const f of found) hits.push({ ...f, what: "a per-file delete loop" });
+    } else if (leadingBin(text) === "xargs" && rePipeOp.test(segments[k].op) && reXargsRm.test(text.replace(/^\s*xargs/, ""))) {
+      const h = pipeHead(segments, k);
+      const toks = findToks(segments[h].text);
+      if (h !== k && toks) hits.push({ toks, idx: h, what: "`xargs rm`" });
+    }
+    for (const call of rmCalls(text)) {
+      for (const w of call.targets) {
+        if (!reFindSubstitutionWord.test(w.raw)) continue;
+        for (const m of w.raw.matchAll(reFindSubstitution)) hits.push({ toks: fields(m[1]), idx: k, what: "`rm` of a `find` substitution" });
+      }
+    }
+  }
+  for (const { toks, idx, what } of hits) {
+    const { roots } = findRoots(toks);
+    const hit = findRootsReason(roots, { ...opts, vars: vars[idx] });
+    if (hit) return `${what} over \`find ${hit.root} ...\` deletes the files under it one at a time, the same loss as a recursive rm of it, and is denied (${hit.reason}).`;
+  }
+  return "";
+}
+
 function guardDepth(cmd, depth, opts, check = subcommandReason) {
   if (depth > 3) return "";
   const stripped = stripCommentLines(stripTextHeredocs(cmd));
@@ -875,22 +1053,58 @@ function guardDepth(cmd, depth, opts, check = subcommandReason) {
   const segments = splitSegments(stripped);
   const vars = assignedVars(segments, opts.home);
   const cwds = check === subcommandReason ? null : segmentCwds(segments, opts.cwd, opts.home);
+  const dataVars = new Map();
+  const allexport = /\bset\s+(?:-[a-zA-Z]*a\b|-o\s+allexport)/.test(stripped);
+  const nestedOpts = { ...opts, nested: true };
   for (let k = 0; k < segments.length; k++) {
-    const sub = segments[k].text;
-    if (isTextOnly(sub)) continue;
+    const original = segments[k].text;
+    const assigned = allexport ? null : dataAssignments(original);
+    if (assigned) {
+      for (const { name, value } of assigned) {
+        const text = expandDataVars(value, dataVars);
+        if (text === null) return `the variable assignment \`${name}=...\` builds destructive text from another variable in a form the guard cannot follow.`;
+        const clean = text.replace(/["'\\`]/g, " ");
+        if (guardDepth(clean, Math.min(depth + 1, 3), nestedOpts, subcommandReason)) dataVars.set(name, clean);
+      }
+      continue;
+    }
+    let sub = original;
+    if (dataVars.size) {
+      const unfollowed = unfollowableUse(original, dataVars);
+      if (unfollowed) return `the variable \`${unfollowed}\` holds destructive text and this command passes it on in a form the guard cannot follow (export, read, unset or an expansion with a modifier).`;
+      sub = expandDataVars(original, dataVars);
+      if (sub === null) return "a variable that holds destructive text is expanded with a modifier the guard cannot follow.";
+    }
+    if (isTextOnly(sub)) {
+      const piped = pipedInto(segments, k);
+      const blocker = piped.find((t) => !isDataReader(t));
+      if (!isFeeder(sub) || blocker === undefined) continue;
+      const receiver = baseName(commandTokens(blocker)[0] || blocker.trim());
+      const note = ` The text is piped into \`${receiver}\`, which is not a known data reader and may run it.`;
+      scans.push(sub);
+      const rf = check(sub, cwds ? { ...opts, vars: vars[k], cwd: cwds[k] } : { ...opts, vars: vars[k] }, sub);
+      if (rf) return rf + note;
+      for (const inner of quotedStrings(sub)) {
+        const ri = guardDepth(inner, depth + 1, nestedOpts, check);
+        if (ri) return ri + note;
+      }
+      continue;
+    }
     const [bin] = firstBin(sub);
     const scan = QUOTED_ARG_BINS.has(bin) ? stripQuotedArgs(sub) : sub;
     scans.push(scan);
     const r = check(scan, cwds ? { ...opts, vars: vars[k], cwd: cwds[k] } : { ...opts, vars: vars[k] }, sub);
-    if (r) return inBody(sub) ? r + HEREDOC_NOTE : r;
+    if (r) return inBody(original) ? r + HEREDOC_NOTE : r;
     if (isWrapper(sub)) {
       for (const inner of quotedStrings(sub)) {
-        const ri = guardDepth(inner, depth + 1, { ...opts, nested: true }, check);
+        const ri = guardDepth(inner, depth + 1, nestedOpts, check);
         if (ri) return depth === 0 ? ri + QUOTED_NOTE(bin) : ri;
       }
     }
   }
   if (check !== subcommandReason) return "";
+  const loop = loopDeleteReason(segments, vars, opts);
+  if (loop) return loop;
   const sql = sqlDeleteReason(scans.join("\n"));
   const reDeleteOnce = new RegExp(reSQLDelete.source, "i");
   return sql && bodies.some((l) => reDeleteOnce.test(l)) ? sql + HEREDOC_NOTE : sql;
@@ -956,47 +1170,62 @@ function gitBranchReason(cmd, { protectedBranches }) {
   return "";
 }
 
+function findRoots(toks) {
+  const roots = [];
+  let i = 0;
+  for (; i < toks.length; i++) {
+    const t = toks[i];
+    if (t === "-H" || t === "-L" || t === "-P" || /^-O\d*$/.test(t)) continue;
+    if (t === "-D") {
+      i++;
+      continue;
+    }
+    if (t.startsWith("-") || t === "!" || t === "(" || t === "\\(") break;
+    roots.push(t);
+  }
+  if (!roots.length) roots.push(".");
+  return { roots, next: i };
+}
+
+function findRootsReason(roots, opts) {
+  for (const root of roots) {
+    const norm = normalizeTarget(root);
+    if (!norm.climbs && norm.path === ".") continue;
+    const r = rmTargetReason(root, opts);
+    if (r) return { root, reason: r.replace(/\.$/, "") };
+  }
+  return null;
+}
+
 function findReason(cmd, opts) {
   for (const m of cmd.matchAll(reFind)) {
     const toks = fields(m[2]);
-    const roots = [];
-    let i = 0;
-    for (; i < toks.length; i++) {
-      const t = toks[i];
-      if (t === "-H" || t === "-L" || t === "-P" || /^-O\d*$/.test(t)) continue;
-      if (t === "-D") {
-        i++;
-        continue;
-      }
-      if (t.startsWith("-") || t === "!" || t === "(" || t === "\\(") break;
-      roots.push(t);
-    }
-    if (!roots.length) roots.push(".");
+    const { roots, next } = findRoots(toks);
     let destructive = "";
-    for (; i < toks.length; i++) {
+    for (let i = next; i < toks.length; i++) {
       if (toks[i] === "-delete") destructive = "-delete";
-      if ((toks[i] === "-exec" || toks[i] === "-execdir") && recursiveRmAt(toks, i + 1)) destructive = toks[i] + " rm -r";
+      if (toks[i] === "-exec" || toks[i] === "-execdir") {
+        const rm = execRmAt(toks, i + 1);
+        if (rm) destructive = `${toks[i]} ${rm}`;
+      }
     }
     if (!destructive) continue;
-    for (const root of roots) {
-      const norm = normalizeTarget(root);
-      if (!norm.climbs && norm.path === ".") continue;
-      const r = rmTargetReason(root, opts);
-      if (r) return `\`find ${root} ... ${destructive}\` is denied (${r.replace(/\.$/, "")}).`;
-    }
+    const hit = findRootsReason(roots, opts);
+    if (hit) return `\`find ${hit.root} ... ${destructive}\` is denied (${hit.reason}).`;
   }
   return "";
 }
 
-function recursiveRmAt(toks, i) {
+function execRmAt(toks, i) {
   if (toks[i] === "sudo") i++;
-  if (!reRmBin.test(toks[i] || "")) return false;
+  if (toks[i] === "unlink") return "unlink";
+  if (!reRmBin.test(toks[i] || "")) return "";
   for (let j = i + 1; j < toks.length; j++) {
     const t = toks[j];
     if (t === "{}" || t === ";" || t === "\\;" || t === "+") break;
-    if (t === "--recursive" || (/^-[a-zA-Z]+$/.test(t) && /[rR]/.test(t))) return true;
+    if (t === "--recursive" || (/^-[a-zA-Z]+$/.test(t) && /[rR]/.test(t))) return "rm -r";
   }
-  return false;
+  return "rm";
 }
 
 function gitPushReason(cmd, { protectedBranches }) {
