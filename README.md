@@ -114,7 +114,7 @@ A `.claude/settings.local.json` that git ignores and has never tracked is your o
 
 The `CYBERINE_DEVGUARD_` names are read from this file only, so no other plugin sees them as its own option. The `CLAUDE_PLUGIN_OPTION_` spelling and the earlier option name `output_paths` (0.19.0 and 0.19.1) still work.
 
-The file is read from the folder the session started in, so a session started inside a linked worktree does not see the main checkout's file. `/cyberine-devguard:status` lists the options taken from it. Writing a Cyberine DevGuard option into any settings file asks you first; under `bypassPermissions` it passes only when your prompt names the file or the key, or you pick an option that names it. The hub grant `CYBERINE_DEVGUARD_HUB_SUBMODULES` lives in the same file (D59).
+The file is read from the folder the session started in. A session started inside a linked git worktree also reads the main checkout's `.claude/settings.local.json` (the main checkout comes from git), under the same test applied to that file in the main checkout; an option set in both files takes the worktree's own value, `regenerable_paths` entries in the main checkout's file are relative to the main checkout, and the hub grant below is still read only from the session's own folder. `/cyberine-devguard:status` lists the options taken from it. Writing a Cyberine DevGuard option into any settings file asks you first; under `bypassPermissions` it passes only when your prompt names the file or the key, or you pick an option that names it. The hub grant `CYBERINE_DEVGUARD_HUB_SUBMODULES` lives in the same file (D59).
 
 ## Bash and MCP writes
 
