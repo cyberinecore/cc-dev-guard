@@ -150,7 +150,8 @@ function denyOnce(v, { input, now, markerDir, warnings, note = "" }) {
   return decision("deny", withWarnings(note ? `${denyReason(v)} ${note}` : denyReason(v), warnings));
 }
 
-const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. Hand the exact change to the user to run themselves (a \`!\` command in the prompt), or the user makes it in a session without bypassPermissions, where this asks.`;
+const literalHandoff = "one copy-paste `!` command with every target written literally (no variable, glob or `$(...)`), and say what was checked that makes it safe";
+const bypassNote = `This session runs with bypassPermissions, where Claude Code lets an ask through for some paths (measured on .claude/, .git/, .vscode/, shell and git config files and .mcp.json), so ${pluginName} denies instead. Hand the exact change to the user as ${literalHandoff}, or the user makes it in a session without bypassPermissions, where this asks.`;
 
 const settingsOnceNote = `The user's current prompt names neither this file nor a key the change sets. Retry the identical change within ${retryMinutes} minutes only if the user asked for it in this conversation; otherwise report it to the user instead. (${pluginName} deny-once for settings files under bypassPermissions; profile strict or the bypass_strict option keeps it denied.)`;
 
@@ -206,7 +207,7 @@ export function render(v, { mode, input, now = Date.now(), markerDir, warnings =
 }
 
 export function dangerDenyReason(reason, escapeName) {
-  return `${pluginName}: ${withoutApprove(reason)} ${pluginName} denies this in every permission mode. Hand the exact command to the user to run themselves, or the user starts the session with ${escapeName}=1.`;
+  return `${pluginName}: ${withoutApprove(reason)} ${pluginName} denies this in every permission mode. Hand the exact command to the user as ${literalHandoff}, or the user starts the session with ${escapeName}=1.`;
 }
 
 function renderUncertain(reason, { input, escapeName, warnings, now, markerDir, bypassStrict, key }) {
@@ -228,7 +229,7 @@ export function renderDanger(reason, { input, escapeName, warnings = [], profile
 
 export function renderDangerAsk(reason, { input, escapeName, warnings = [], profile = "assist", now = Date.now(), markerDir, bypassStrict = false } = {}) {
   if (profile !== "strict" && isUncertainDanger(reason)) return renderUncertain(reason, { input, escapeName, warnings, now, markerDir, bypassStrict, key: uncertainKey(input) });
-  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${pluginName}: ${withoutApprove(reason)} This session runs with bypassPermissions, where no prompt reaches the user, so danger_guard denies it. Take the safer route named above, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
+  if (input?.permission_mode === "bypassPermissions") return decision("deny", withWarnings(`${pluginName}: ${withoutApprove(reason)} This session runs with bypassPermissions, where no prompt reaches the user, so danger_guard denies it. Take the safer route named above, or hand the exact command to the user as ${literalHandoff}; the user can start the session with ${escapeName}=1.`, warnings));
   return decision("ask", withWarnings(`${pluginName}: ${reason}`, warnings));
 }
 
@@ -260,7 +261,7 @@ export function renderWorktree(v, { mode, input, warnings = [], profile = "assis
     if (!firstTry(`worktree\u0000${input?.cwd ?? ""}\u0000${input?.tool_input?.command ?? ""}`, { input, now, markerDir })) return null;
     return decision("deny", withWarnings(worktreeOnceReason(v), warnings));
   }
-  if (isBypass(input)) return decision("deny", withWarnings(`${withoutApprove(worktreeReason(v))} This session runs with bypassPermissions, where no prompt reaches the user, so ${pluginName} denies it. Create the worktree under the repository's \`.claude/worktrees/\` (or through the Agent tool's isolation "worktree" or EnterWorktree), or hand the exact \`git worktree add\` command to the user to run themselves.`, warnings));
+  if (isBypass(input)) return decision("deny", withWarnings(`${withoutApprove(worktreeReason(v))} This session runs with bypassPermissions, where no prompt reaches the user, so ${pluginName} denies it. Create the worktree under the repository's \`.claude/worktrees/\` (or through the Agent tool's isolation "worktree" or EnterWorktree), or hand the exact \`git worktree add\` command to the user as ${literalHandoff}.`, warnings));
   return askOrDeny(input, reason);
 }
 
@@ -268,7 +269,7 @@ export function renderLive(f, { input, now = Date.now(), markerDir, warnings = [
   if (!f) return null;
   if (f.level !== "deny" && defersToAuto(profile, input)) return null;
   if (f.level === "deny") {
-    return decision("deny", withWarnings(`${pluginName}: ${f.reason} live_guard denies this in every permission mode, because it disrupts the user's running machine beyond this session's own work. Stop only a process this session started, by its PID, or hand the exact command to the user to run themselves; the user can start the session with ${escapeName}=1.`, warnings));
+    return decision("deny", withWarnings(`${pluginName}: ${f.reason} live_guard denies this in every permission mode, because it disrupts the user's running machine beyond this session's own work. Stop only a process this session started, by its PID, or hand the exact command to the user as ${literalHandoff}; the user can start the session with ${escapeName}=1.`, warnings));
   }
   if (input?.permission_mode === "bypassPermissions") {
     if (f.hard || bypassStrict) return decision("deny", withWarnings(`${pluginName}: ${withoutApprove(f.reason)} This session runs with bypassPermissions, where no prompt reaches the user, so live_guard denies it. Report the command to the user instead of running it another way.`, warnings));
