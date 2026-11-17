@@ -237,11 +237,19 @@ export function worktreeReason(v) {
   return `${pluginName}: this command runs \`git worktree add\` for \`${v.target}\`, outside \`${v.worktreesDir}\`. A worktree elsewhere (a /tmp folder above all) is easy to lose: the folder goes away and a stale worktree record stays behind. Prefer the Agent tool's isolation "worktree" or EnterWorktree, which place worktrees under \`${v.worktreesDir}\`, or stay in this checkout and use a scratch directory. Approve only if you want a worktree at that path.`;
 }
 
-export function renderWorktree(v, { mode, input, warnings = [], profile = "assist" } = {}) {
+function worktreeOnceReason(v) {
+  return `Default: NO. ${pluginName}: this command runs \`git worktree add\` for \`${v.target}\`, a scratch folder outside \`${v.worktreesDir}\`. A worktree there is easy to lose: the folder goes away and a stale worktree record stays behind. Prefer the Agent tool's isolation "worktree" or EnterWorktree, or a path directly under \`${v.worktreesDir}\`. If the worktree really has to live there, retry the identical command within ${retryMinutes} minutes only if the user asked for a worktree at that path in this conversation, and remove it with \`git worktree remove\` when you are done. (${pluginName} deny-once under bypassPermissions for a worktree in a scratch folder; profile strict or the bypass_strict option keeps it denied.)`;
+}
+
+export function renderWorktree(v, { mode, input, warnings = [], profile = "assist", now = Date.now(), markerDir, bypassStrict = false } = {}) {
   if (!v || v.action !== "cross" || mode === "off") return null;
   if (mode === "ask" && defersToAuto(profile, input)) return null;
   const reason = withWarnings(worktreeReason(v), warnings);
   if (mode === "warn") return { systemMessage: `${pluginName} (warn mode): ${reason}` };
+  if (v.why === "worktree-outside" && v.scratch && isBypass(input) && profile !== "strict" && !bypassStrict) {
+    if (!firstTry(`worktree\u0000${input?.cwd ?? ""}\u0000${input?.tool_input?.command ?? ""}`, { input, now, markerDir })) return null;
+    return decision("deny", withWarnings(worktreeOnceReason(v), warnings));
+  }
   return askOrDeny(input, reason);
 }
 
