@@ -81,6 +81,8 @@ Plugin options, yours only (stored in your user settings by Claude Code):
 | `live_guard` | `true` | deny process kills and power commands that reach far beyond the session, and ask before commands that disrupt the user's running machine (see [The running machine](#the-running-machine)) |
 | `live_guard_desktop` | `false` | with `live_guard`, also ask before `pbcopy`, `say`, `afplay`, `cliclick`, `open` without `-g`, and AppleScript keystrokes, dialogs, volume, clipboard or `activate` |
 | `relaunch_limit` | `10` | with `live_guard`, ask before this session launches or brings the same app to the front more than this many times within 60 minutes (denied under `bypassPermissions`); `0` turns it off |
+| `relaunch_exempt_apps` | none | with `live_guard`, app names or bundle ids that `relaunch_limit` does not count (`Safari`, `com.apple.Safari`; compared without case against the name given to `open -a`, the `.app` folder name, or the bundle id given to `open -b` or AppleScript, so list each spelling you use); a repository file or `settings.json` env block that lists it is ignored with a warning |
+| `allow_commands` | none | exact commands that `danger_guard` and `live_guard` let through in every permission mode, for example `rsync -a --delete ./out/ backup:/srv/out/` (see [Allowed commands](#allowed-commands)); `/config` only |
 | `session_hint` | `true` | at session start, hand Claude three sentences on how to avoid a `danger_guard` denial (a literal path for a recursive `rm`, no destructive statements in text fed to an interpreter) and, with `live_guard` on, one sentence on stopping processes by PID; off, or with both guards off, nothing is added |
 | `protected_branches` | `main`, `master`, `production`, `prod`, `development`, `develop`, `dev`, `release`, `staging` | branches a force-push to is denied |
 | `deny_aws_s3_deletes` | `true` | also deny `aws s3 rm`/`rb` and `aws s3api delete-*` |
@@ -104,9 +106,9 @@ A repository can add `.claude/cyberine-devguard.json`, which may only make the g
 - `relaunchLimit` can only be lowered, to a whole number of at least 1.
 - `protectedBranches` adds branch names to the user's list; it cannot remove one.
 - `protect` lists paths relative to the repository; writes under them ask.
-- Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, `allowDangerEnv`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its `.claude/settings.json`, and of a `.claude/settings.local.json` that git tracks or does not ignore.
+- Anything that would widen scope (`extraAllowedDirs`, `hubRepos`, `allowDangerEnv`, `allowCommands`, `relaunchExemptApps`, unknown keys) is ignored with a warning shown in Cyberine DevGuard's next prompt and in `/cyberine-devguard:status`. The same tighten-only rule applies to Cyberine DevGuard options that a repository sets through the `env` block of its `.claude/settings.json`, and of a `.claude/settings.local.json` that git tracks or does not ignore.
 
-A `.claude/settings.local.json` that git ignores and has never tracked is your own file, not the repository's: a clone cannot ship it. Every option above except `allow_danger_env` can be set there for that one repository, as `"env": {"CYBERINE_DEVGUARD_<OPTION IN CAPITALS>": "<value>"}`, and it wins over the value from `/config`. Lists are comma-separated, and `regenerable_paths` entries may be relative to the repository:
+A `.claude/settings.local.json` that git ignores and has never tracked is your own file, not the repository's: a clone cannot ship it. Every option above except `allow_danger_env` and `allow_commands` can be set there for that one repository, as `"env": {"CYBERINE_DEVGUARD_<OPTION IN CAPITALS>": "<value>"}`, and it wins over the value from `/config`. Lists are comma-separated, and `regenerable_paths` entries may be relative to the repository:
 
 ```json
 { "env": { "CYBERINE_DEVGUARD_REGENERABLE_PATHS": "packages/*/dist-types,site/.source" } }
@@ -190,11 +192,21 @@ Asked about (under `bypassPermissions`: denied once, and a retry within 10 minut
 - physical devices: `adb install`/`uninstall`/`reboot`/`root`, `adb shell am force-stop`/`pm clear`, `xcrun devicectl` with `uninstall` or `--terminate-existing`, `ios-deploy --uninstall`. An emulator (`adb -e`, `-s emulator-*`) and `xcrun simctl` pass;
 - `rsync --delete` (or `--remove-source-files`) to a remote `host:path` without `-n`/`--dry-run`; `systemctl stop`/`restart`/`disable` and similar;
 - AppleScript that quits an app;
-- an app launched or brought to the front (`open -a`, a `.app` path, AppleScript `activate`) more than `relaunch_limit` times in 60 minutes by one session. Under `bypassPermissions` this one is denied on every try, since the retries are the problem.
+- an app launched or brought to the front (`open -a`, a `.app` path, AppleScript `activate`) more than `relaunch_limit` times in 60 minutes by one session. Under `bypassPermissions` this one is denied on every try, since the retries are the problem. Apps listed in `relaunch_exempt_apps` are not counted (the `open` focus ask of `live_guard_desktop` still applies to them).
 
 With `live_guard_desktop` on, it also asks before `pbcopy`, `say`, `afplay`, `cliclick`, `terminal-notifier`, `open` without `-g`, and AppleScript that sends keystrokes or clicks, shows a dialog or notification, changes the volume or the clipboard, or calls `activate`.
 
 The same wrappers are followed as for `danger_guard` (`sudo`, `env`, `nohup`, `timeout`, `bash -c`, `ssh <host> '...'`, `eval`, `xargs`), and text-only commands and `git commit -m` messages pass. `CY_ALLOW_DANGER=1` (or your `allow_danger_env` variable) lifts it, and `live_guard` set to `false` turns it off. Like `danger_guard`, it reads command text only: a script, a build tool or an app that kills or relaunches on its own is not seen, and an app relaunched by a dev server's file watcher is not counted.
+
+## Allowed commands
+
+`allow_commands` lists commands that `danger_guard` and `live_guard` let through in every permission mode, `bypassPermissions` included, for the one command you run all the time and the guard always stops, such as `rsync -a --delete ./out/ backup:/srv/out/`. Set it in `/config`, one entry per item.
+
+- An entry is matched exactly, after trimming. An entry that ends in one `*` matches any command that starts with the text before it (`rsync -a --delete ./out/ backup:/srv/out/*`); there is no regex, and a `*` anywhere else makes the entry invalid. The part after the prefix must not hold `$(`, a backtick, `<` or `>` (a `2>&1` copy is fine).
+- A command is split on `&&`, `||`, `;`, `|`, `&` and new lines outside quotes, and it passes only when every part matches an entry. A listed `rsync` chained with an unlisted `rm -rf` asks or is denied as before. An entry that chains commands is ignored with a warning.
+- Only these two guards are lifted. The write guard for other repositories (`mode`, `bash_guard`) and the worktree guard still judge the same command.
+- It is yours only: `/config` is the one place that sets it. A repository's `.claude/cyberine-devguard.json`, the `env` block of its `.claude/settings.json`, and even your own ignored `.claude/settings.local.json` (like `allow_danger_env`, an escape hatch belongs to the user's own settings, not a file in the repository) are ignored with a warning shown in the next prompt and in `/cyberine-devguard:status`. Writing the option into any settings file asks first, and under `bypassPermissions` is denied unless your prompt or a picked option names it.
+- An entry cannot contain a comma, because the list is comma-separated.
 
 ## Worktrees
 

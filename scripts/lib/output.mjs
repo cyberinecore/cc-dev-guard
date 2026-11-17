@@ -162,7 +162,7 @@ function setsHubGrant(toolInput) {
 
 const hubGrantNote = `The change sets ${HUB_GRANT_KEY}, which lets this repository write into its own submodules in every later session, so it needs the user's own word: it passes only when the user's prompt in this turn names the file or the key, or the user picks an AskUserQuestion option whose label names it (for example \"Enable in settings.local.json\"). Ask the user one of those ways, then retry.`;
 
-const reGuardOption = new RegExp(`regenerable_paths|output_paths|(?:${OPTION_PREFIX}|${LOCAL_OPTION_PREFIX})(?:${OPTION_KEYS.map((k) => k.toUpperCase()).join("|")})\\b`, "i");
+const reGuardOption = new RegExp(`regenerable_paths|output_paths|allow_commands|relaunch_exempt_apps|(?:${OPTION_PREFIX}|${LOCAL_OPTION_PREFIX})(?:${OPTION_KEYS.map((k) => k.toUpperCase()).join("|")})\\b`, "i");
 
 function setsGuardOption(toolInput) {
   const texts = [toolInput?.content, toolInput?.new_string, toolInput?.command, ...(Array.isArray(toolInput?.edits) ? toolInput.edits.map((e) => e?.new_string) : [])];

@@ -152,6 +152,20 @@
       "title": "Extra escape variable",
       "description": "Name of a second environment variable that, set to 1 when the session starts, lifts danger_guard for that session, in addition to CY_ALLOW_DANGER. A value set by a repository's .claude settings env block is ignored.",
       "default": ""
+    },
+    "allow_commands": {
+      "type": "string",
+      "title": "Allowed commands",
+      "description": "Exact commands that danger_guard and live_guard let through in every permission mode, such as \"rsync -a --delete ./out/ backup:/srv/out/\". An entry ending in one * matches any command that starts with the text before it (no regex; a tail with $(, a backtick, < or > never matches). A command that chains others (&&, ;, |, a new line) passes only when every part is listed. Only you can set it: a repository's settings env block, its .claude/cyberine-devguard.json and its settings.local.json are ignored with a warning. An entry cannot contain a comma.",
+      "multiple": true,
+      "default": []
+    },
+    "relaunch_exempt_apps": {
+      "type": "string",
+      "title": "Apps the relaunch limit does not count",
+      "description": "App names or bundle ids (Safari, com.apple.Safari) that relaunch_limit does not count, so a session can launch them past the limit without an ask. Matched without case against the name given to open -a, the .app folder name, the bundle id given to open -b or AppleScript, so list each spelling you use. Only you can set it: a repository's .claude/cyberine-devguard.json and its settings.json env block are ignored with a warning.",
+      "multiple": true,
+      "default": []
     }
   }
 }
