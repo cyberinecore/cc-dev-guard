@@ -798,9 +798,9 @@ function branchDeleteAsk(g, opts) {
     const exists = opts.git.refExists(base, `refs/heads/${b}`);
     if (exists === null) return probeFailed(what, "`git rev-parse` failed");
     if (!exists) continue;
-    const n = opts.git.countRevs(base, [`refs/heads/${b}`, "--not", "--remotes"]);
+    const n = opts.git.unpushedCommits(base, `refs/heads/${b}`);
     if (n === null) return probeFailed(what, "`git rev-list` failed");
-    if (n > 0) return `${what} deletes ${n} commit${n === 1 ? "" : "s"} that no remote has. Push the branch first (\`git push -u origin ${b}\`), or approve only if they may go.`;
+    if (n > 0) return `${what} deletes ${n} commit${n === 1 ? "" : "s"} that no remote has, by commit or by an identical patch. Push the branch first (\`git push -u origin ${b}\`), or approve only if they may go.`;
   }
   return "";
 }

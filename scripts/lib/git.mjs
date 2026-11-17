@@ -7,6 +7,9 @@ const SAFE_CONFIG = ["-c", "core.fsmonitor=false", "-c", "core.untrackedCache=fa
 
 const PASSED_ENV = ["PATH", "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "XDG_CONFIG_HOME", "APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE"];
 
+const PATCH_EQUIVALENT_REFS = 12;
+const PATCH_EQUIVALENT_BUDGET_MS = 3500;
+
 function gitEnv() {
   const env = {};
   for (const k of PASSED_ENV) if (typeof process.env[k] === "string") env[k] = process.env[k];
@@ -17,10 +20,10 @@ function gitEnv() {
 
 export function makeGit(onGit) {
   const env = gitEnv();
-  const run = (dir, args) => {
+  const run = (dir, args, timeout = 5000) => {
     onGit?.(args);
     try {
-      return { ok: true, out: execFileSync("git", [...SAFE_CONFIG, "-C", dir, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000, windowsHide: true }) };
+      return { ok: true, out: execFileSync("git", [...SAFE_CONFIG, "-C", dir, ...args], { env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout, windowsHide: true }) };
     } catch (e) {
       return { ok: false, status: typeof e.status === "number" ? e.status : null, out: "" };
     }
@@ -112,6 +115,29 @@ export function makeGit(onGit) {
       const r = run(dir, ["rev-list", "--count", ...args]);
       const n = Number(r.out.trim());
       return r.ok && r.out.trim() !== "" && Number.isInteger(n) ? n : null;
+    },
+    unpushedCommits(dir, ref) {
+      const first = run(dir, ["rev-list", ref, "--not", "--remotes"]);
+      if (!first.ok) return null;
+      let left = first.out.split("\n").filter(Boolean);
+      if (left.length === 0) return 0;
+      const refs = run(dir, ["for-each-ref", "--format=%(refname)", "refs/remotes"]);
+      if (!refs.ok) return left.length;
+      const preferred = run(dir, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+      const target = preferred.ok ? preferred.out.trim() : "";
+      const names = refs.out.split("\n").filter((n) => n && !n.endsWith("/HEAD"));
+      const ordered = [...names.filter((n) => n === target), ...names.filter((n) => n !== target)].slice(0, PATCH_EQUIVALENT_REFS);
+      const deadline = Date.now() + PATCH_EQUIVALENT_BUDGET_MS;
+      for (const remote of ordered) {
+        const budget = deadline - Date.now();
+        if (budget < 200) break;
+        const r = run(dir, ["rev-list", "--cherry-pick", "--right-only", remote + "..." + ref], Math.min(5000, budget));
+        if (!r.ok) break;
+        const unique = new Set(r.out.split("\n").filter(Boolean));
+        left = left.filter((sha) => unique.has(sha));
+        if (left.length === 0) return 0;
+      }
+      return left.length;
     },
     refExists(dir, ref) {
       const r = run(dir, ["rev-parse", "--verify", "--quiet", ref]);
