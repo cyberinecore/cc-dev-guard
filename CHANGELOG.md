@@ -2,6 +2,19 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.21.0] - 2026-11-18
+
+- Security: `echo` or `printf` text piped into anything but a known data reader is now checked like a command. Before, a destructive SQL statement printed into `psql`, or a recursive delete printed into `sh`, passed (D73).
+- Security: a per-file delete loop, `xargs rm` or `-exec rm` over an absolute `find` root is denied like `find -delete` (D73).
+- Change: destructive text held in a plain variable assignment is data until it is used; using it in a shell, `eval`, an SQL client or as a command is denied. A restricted `python3 -` heredoc that only writes a file is data (D73).
+- Feature: `allow_commands` lists commands that `danger_guard` and `live_guard` let through in every mode; only `/config` can set it (D70).
+- Feature: `relaunch_exempt_apps` lists apps the relaunch budget does not count (D71).
+- Feature: a session started inside a linked worktree also reads options from the main checkout's ignored, untracked `.claude/settings.local.json`; the worktree's own file wins per option (D66).
+- Change: `git branch -D` no longer asks for commits that a remote branch already holds as a cherry-pick; a squash-merged branch still asks (D68).
+- Change: under `bypassPermissions` a `git worktree add` into a scratch folder is held once and an identical retry passes; `strict`, `bypass_strict`, siblings and nested worktrees stay denied (D72).
+- Change: no deny reason under `bypassPermissions` says "Approve only if"; a repository nested in the working directory is described as such (D67).
+- Change: a command handed to the user after a deny is asked for as one copy-paste `!` command with every target literal, plus what makes it safe (D74).
+
 ## [0.20.0] - 2026-11-17
 
 - Feature: a recursive `rm` or `find ... -delete` of a path at or below an entry of `regenerable_paths` now passes, when git reports the path ignored, tracks nothing inside it, the real path stays inside the repository and no nested repository sits inside it (D65). Before, the option only affected `git worktree remove`, and such a delete was stopped as an absolute path the guard could not prove safe. Any git error keeps the stop.
