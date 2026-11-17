@@ -1,8 +1,9 @@
 import { lstatSync, readFileSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, normalize, relative, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { DEFAULT_MODE, DEFAULT_PROFILE, LOCAL_OPTION_PREFIX, MODES, OPTION_PREFIX, PROFILES, REPO_CONFIG_FILE } from "./constants.mjs";
 import { DEFAULT_PROTECTED_BRANCHES } from "./dangerguard.mjs";
 import { makeGit } from "./git.mjs";
+import { realPathOr } from "./paths.mjs";
 
 const defaultMode = DEFAULT_MODE;
 const modeList = MODES.join(", ");
@@ -64,35 +65,77 @@ const LOCAL_SETTINGS = [".claude", "settings.local.json"];
 const NEVER_FROM_LOCAL = new Set(["allow_danger_env"]);
 const REPO_RELATIVE_LISTS = ["regenerable_paths", "output_paths"];
 
-function settingsEnv(sessionRoot, file) {
+function settingsEnv(root, file) {
   try {
-    const env = JSON.parse(readFileSync(join(sessionRoot, ".claude", file), "utf8"))?.env;
+    const env = JSON.parse(readFileSync(join(root, ".claude", file), "utf8"))?.env;
     return env && typeof env === "object" && !Array.isArray(env) ? env : {};
   } catch {
     return {};
   }
 }
 
-function localSettingsAreTheUsers(sessionRoot, git) {
-  const path = join(sessionRoot, ...LOCAL_SETTINGS);
+function localSettingsAreTheUsers(root, git) {
+  const path = join(root, ...LOCAL_SETTINGS);
   try {
-    if (!lstatSync(join(sessionRoot, LOCAL_SETTINGS[0])).isDirectory() || !lstatSync(path).isFile()) return false;
-    return git.isUntracked(sessionRoot, LOCAL_SETTINGS.join("/")) && git.isIgnored(sessionRoot, path);
+    if (!lstatSync(join(root, LOCAL_SETTINGS[0])).isDirectory() || !lstatSync(path).isFile()) return false;
+    return git.isUntracked(root, LOCAL_SETTINGS.join("/")) && git.isIgnored(root, path);
   } catch {
     return false;
   }
 }
 
+function localOptionEntries(root) {
+  const env = settingsEnv(root, LOCAL_SETTINGS[1]);
+  const valueOf = (k) => [LOCAL_OPTION_PREFIX, OPTION_PREFIX].map((prefix) => env[prefix + k.toUpperCase()]).find((v) => typeof v === "string");
+  const out = {};
+  for (const k of OPTION_KEYS) {
+    if (NEVER_FROM_LOCAL.has(k)) continue;
+    const v = valueOf(k);
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
+function trustedOptionEntries(root, git) {
+  const entries = localOptionEntries(root);
+  if (!Object.keys(entries).length || !localSettingsAreTheUsers(root, git)) return {};
+  for (const k of REPO_RELATIVE_LISTS) if (entries[k] !== undefined) entries[k] = entries[k].split(",").map((s) => s.trim()).filter(Boolean).map((p) => (isAbsolute(p) ? p : join(root, p))).join(",");
+  return entries;
+}
+
+function linkedWorktreeMainGuess(sessionRoot) {
+  let cur = sessionRoot;
+  for (;;) {
+    const dotGit = join(cur, ".git");
+    try {
+      const st = lstatSync(dotGit);
+      if (!st.isFile()) return "";
+      const m = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(readFileSync(dotGit, "utf8"));
+      if (!m) return "";
+      const gitDir = resolve(cur, m[1]);
+      const common = dirname(dirname(gitDir));
+      return basename(dirname(gitDir)) === "worktrees" && basename(common) === ".git" ? dirname(common) : "";
+    } catch (e) {
+      if (e?.code !== "ENOENT" && e?.code !== "ENOTDIR") return "";
+    }
+    const parent = dirname(cur);
+    if (parent === cur) return "";
+    cur = parent;
+  }
+}
+
 export function localOptionValues(sessionRoot, git = null) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return {};
-  const env = settingsEnv(sessionRoot, LOCAL_SETTINGS[1]);
-  const valueOf = (k) => [LOCAL_OPTION_PREFIX, OPTION_PREFIX].map((prefix) => env[prefix + k.toUpperCase()]).find((v) => typeof v === "string");
-  const set = OPTION_KEYS.filter((k) => !NEVER_FROM_LOCAL.has(k) && valueOf(k) !== undefined);
-  if (!set.length || !localSettingsAreTheUsers(sessionRoot, git || makeGit())) return {};
-  const out = {};
-  for (const k of set) out[k] = valueOf(k);
-  for (const k of REPO_RELATIVE_LISTS) if (out[k] !== undefined) out[k] = out[k].split(",").map((s) => s.trim()).filter(Boolean).map((p) => (isAbsolute(p) ? p : join(sessionRoot, p))).join(",");
-  return out;
+  let made = git;
+  const gitOf = () => (made ||= makeGit());
+  const own = trustedOptionEntries(sessionRoot, gitOf());
+  const guess = linkedWorktreeMainGuess(sessionRoot);
+  if (!guess || !Object.keys(localOptionEntries(guess)).length) return own;
+  const g = gitOf();
+  if (typeof g.mainRoot !== "function") return own;
+  const main = g.mainRoot(sessionRoot);
+  if (!main || main === realPathOr(sessionRoot)) return own;
+  return { ...trustedOptionEntries(main, g), ...own };
 }
 
 export function repoSetsEnv(sessionRoot, name) {
