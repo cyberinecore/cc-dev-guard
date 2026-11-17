@@ -1,3 +1,4 @@
+import { lstatSync, readdirSync, realpathSync } from "node:fs";
 import { realPathOr } from "./paths.mjs";
 
 export const DEFAULT_PROTECTED_BRANCHES = ["main", "master", "production", "prod", "development", "develop", "dev", "release", "staging"];
@@ -477,9 +478,9 @@ export function stripCommentLines(cmd) {
     .join("\n");
 }
 
-export function dangerReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true, isCacheDir = null, isRepoRoot = null, root = "", cwd = "" } = {}) {
+export function dangerReason(command, { home = "", configDir = "", protectedBranches = DEFAULT_PROTECTED_BRANCHES, awsS3 = true, isCacheDir = null, isRepoRoot = null, root = "", cwd = "", declaredOutput = null } = {}) {
   if (typeof command !== "string" || command === "") return "";
-  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), awsS3, isCacheDir, isRepoRoot, root, cwd };
+  const opts = { home: home.replace(/\/+$/, ""), configDir, protectedBranches: new Set(protectedBranches), awsS3, isCacheDir, isRepoRoot, root, cwd, declaredOutput };
   return tagWriteShapeReason(command) || guardDepth(command, 0, opts);
 }
 
@@ -618,6 +619,45 @@ function declaredPatterns(regenerablePaths, mainRoot) {
     out.push(segs.map((seg) => new RegExp("^" + seg.split("*").map((t) => t.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join("[^/]*") + "$")));
   }
   return out;
+}
+
+const NESTED_WALK_LIMIT = 50000;
+
+function holdsNestedRepo(dir) {
+  const stack = [dir];
+  let seen = 0;
+  while (stack.length) {
+    const cur = stack.pop();
+    for (const e of readdirSync(cur, { withFileTypes: true })) {
+      if (++seen > NESTED_WALK_LIMIT) return true;
+      if (e.name === ".git") return true;
+      if (e.isDirectory() && !e.isSymbolicLink()) stack.push(joinPosix(cur, e.name));
+    }
+  }
+  return false;
+}
+
+export function isDeclaredOutput(dir, { git, regenerablePaths }) {
+  try {
+    if (!git || !regenerablePaths?.length) return false;
+    const real = slashed(realpathSync(dir)).replace(/\/+$/, "");
+    const isDir = lstatSync(real).isDirectory();
+    const top = slashed(git.strictToplevel(isDir ? real : dirNamePosix(real))).replace(/\/+$/, "");
+    if (!top || real === top || !real.startsWith(top + "/")) return false;
+    const mainRoot = git.mainRoot(top);
+    if (!mainRoot) return false;
+    const rel = real.slice(top.length + 1);
+    const segs = rel.split("/");
+    const patterns = declaredPatterns(regenerablePaths, mainRoot);
+    if (!patterns.some((pat) => segs.length >= pat.length && pat.every((re, i) => re.test(segs[i])))) return false;
+    if (segs.includes(".git")) return false;
+    if (git.ignoreState(top, rel) !== true) return false;
+    const tracked = git.trackedUnder(top, rel);
+    if (!tracked || tracked.length) return false;
+    return !(isDir && holdsNestedRepo(real));
+  } catch {
+    return false;
+  }
 }
 
 function sharedFolder(dirs) {
@@ -1032,7 +1072,7 @@ function rmTarget(raw, value, vars) {
 }
 
 function rmTargetReason(raw, opts, value = raw.replace(/^["']+|["']+$/g, "")) {
-  const { home, configDir, isCacheDir, isRepoRoot, root = "", cwd = "", vars } = opts;
+  const { home, configDir, isCacheDir, isRepoRoot, root = "", cwd = "", vars, declaredOutput } = opts;
   if (value === "") return "";
   const target = rmTarget(raw, value, vars);
   const quotedRaw = raw;
@@ -1060,8 +1100,9 @@ function rmTargetReason(raw, opts, value = raw.replace(/^["']+|["']+$/g, "")) {
   if (cacheDirCandidate(quotedRaw, expanded) && !reLexicalDots.test(target.lexical)) {
     if (isCacheDir && isCacheDir(abs)) return "";
     if (scratchAncestor(abs, { home, root, isCacheDir, isRepoRoot })) return "";
+    if (declaredOutput && declaredOutput(abs)) return "";
   }
-  return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, regenerable build/cache dirs, directories carrying a CACHEDIR.TAG, and paths below one of those inside the repository or home are allowed).`;
+  return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, regenerable build/cache dirs, directories carrying a CACHEDIR.TAG, paths below one of those inside the repository or home, and ignored, untracked paths the user declared in the regenerable_paths option are allowed).`;
 }
 
 function joinPosix(dir, rel) {

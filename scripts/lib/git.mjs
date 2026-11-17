@@ -56,6 +56,19 @@ export function makeGit(onGit) {
     isIgnored(dir, path) {
       return run(dir, ["check-ignore", "-q", "--", path]).ok;
     },
+    strictToplevel(dir) {
+      const r = run(dir, ["rev-parse", "--show-toplevel"]);
+      return r.ok && r.out.trim() ? realPathOr(r.out.trim()) : "";
+    },
+    ignoreState(dir, path) {
+      const r = run(dir, ["check-ignore", "-q", "--", path]);
+      if (r.ok) return true;
+      return r.status === 1 ? false : null;
+    },
+    trackedUnder(dir, rel) {
+      const r = run(dir, ["ls-files", "-z", "--cached", "--", rel]);
+      return r.ok ? r.out.split("\0").filter(Boolean) : null;
+    },
     isGitlink(top, rel) {
       const r = run(top, ["ls-files", "--stage", "-z", "--", rel]);
       if (!r.ok) return false;

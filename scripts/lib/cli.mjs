@@ -13,7 +13,7 @@ import { namedEnv } from "./environment.mjs";
 import { makeGit } from "./git.mjs";
 import { findWrites, judgeWorktreeAdds, mentionsWorktree } from "./bashguard.mjs";
 import { isCacheDir, isRepoRoot } from "./cachedir.mjs";
-import { dangerAskReason, dangerReason, ESCAPE_ENV, isCacheDirTagPath, TAG_WRITE_REASON } from "./dangerguard.mjs";
+import { dangerAskReason, dangerReason, ESCAPE_ENV, isCacheDirTagPath, isDeclaredOutput, TAG_WRITE_REASON } from "./dangerguard.mjs";
 import { liveCheck, liveFileReason } from "./liveguard.mjs";
 import { countLaunches, liveStateDir, loadLiveState, RELAUNCH_WINDOW_MS, saveLiveState } from "./livestate.mjs";
 import { mcpWriteTargets } from "./mcpfs.mjs";
@@ -166,11 +166,11 @@ function bashHook(input, env, deps, now) {
   const cwd = typeof input.cwd === "string" && isAbsolute(input.cwd) ? input.cwd : sessionRoot;
   const home = env.HOME || env.USERPROFILE || "";
   const config = loadConfig({ env, sessionRoot });
-  const danger = dangerCheck(command, input, { env, config, sessionRoot, home, cwd, now });
+  const git = deps.git || makeGit();
+  const danger = dangerCheck(command, input, { env, config, sessionRoot, home, cwd, now, git });
   if (danger) return logGuard(env, config, input, "danger", danger, now), danger;
   const live = liveCommandCheck(command, input, { env, config, sessionRoot, now, tmuxSessionExists: deps.tmuxSessionExists || tmuxSessionExists });
   if (live && live.hookSpecificOutput?.permissionDecision === "deny") return logGuard(env, config, input, "live", live, now), live;
-  const git = deps.git || makeGit();
   const dangerAsk = dangerAskCheck(command, input, { env, config, sessionRoot, home, cwd, git });
   if (dangerAsk) return logGuard(env, config, input, "danger", dangerAsk, now), dangerAsk;
   if (live) return logGuard(env, config, input, "live", live, now), live;
@@ -204,9 +204,10 @@ function escapeOpen(env, config, sessionRoot) {
   return { open: false, warnings };
 }
 
-function dangerCheck(command, input, { env, config, sessionRoot, home, cwd = "", now }) {
+function dangerCheck(command, input, { env, config, sessionRoot, home, cwd = "", now, git = null }) {
   if (!config.dangerGuard) return null;
-  const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd });
+  const declaredOutput = git && config.regenerablePaths.length ? (dir) => isDeclaredOutput(dir, { git, regenerablePaths: config.regenerablePaths }) : null;
+  const reason = dangerReason(command, { home, configDir: env.CLAUDE_CONFIG_DIR || "", protectedBranches: config.protectedBranches, awsS3: config.denyAwsS3Deletes, isCacheDir: (dir) => isCacheDir(dir, { home }), isRepoRoot, root: sessionRoot, cwd, declaredOutput });
   return dangerOut(reason, { env, config, sessionRoot, input, now });
 }
 

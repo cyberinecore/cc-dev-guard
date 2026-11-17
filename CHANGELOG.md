@@ -2,6 +2,10 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.20.0] - 2026-11-17
+
+- Feature: a recursive `rm` or `find ... -delete` of a path at or below an entry of `regenerable_paths` now passes, when git reports the path ignored, tracks nothing inside it, the real path stays inside the repository and no nested repository sits inside it (D65). Before, the option only affected `git worktree remove`, and such a delete was stopped as an absolute path the guard could not prove safe. Any git error keeps the stop.
+
 ## [0.19.2] - 2026-11-17
 
 - Change: the option `output_paths` is now named `regenerable_paths`, after what it means: paths whose ignored files can be made again (D64). The old name still works.
