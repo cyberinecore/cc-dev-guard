@@ -729,17 +729,6 @@ export function isDeclaredOutput(dir, { git, regenerablePaths }) {
   }
 }
 
-function sharedFolder(dirs) {
-  let shared = dirs[0].split("/");
-  for (const d of dirs.slice(1)) {
-    const segs = d.split("/");
-    let i = 0;
-    while (i < shared.length && shared[i] === segs[i]) i++;
-    shared = shared.slice(0, i);
-  }
-  return shared.join("/");
-}
-
 function worktreeEntryLoss(entry, base, mainRoot, { git, regenerablePaths }) {
   const lost = [];
   const ignored = git.ignoredPaths(entry.path);
@@ -753,12 +742,23 @@ function worktreeEntryLoss(entry, base, mainRoot, { git, regenerablePaths }) {
   const kept = [];
   const folders = [];
   const parentOf = (y) => (y.includes("/") ? y.slice(0, y.lastIndexOf("/")) : "");
+  const ignoredDir = new Map();
+  const ruleFolder = (y) => {
+    const segs = y.replace(/\/+$/, "").split("/");
+    for (let i = 1; i < segs.length; i++) {
+      const cand = segs.slice(0, i).join("/");
+      if (folders.some((d) => d === cand)) return cand;
+      if (!ignoredDir.has(cand)) ignoredDir.set(cand, git.isIgnored(entry.path, `${cand}/`));
+      if (ignoredDir.get(cand)) return cand;
+    }
+    return parentOf(y.replace(/\/+$/, ""));
+  };
   for (const x of ignored) {
     if (regenerable(x)) continue;
     if (!x.endsWith("/")) {
       if (!declared(x)) {
         kept.push(x);
-        folders.push(parentOf(x));
+        folders.push(ruleFolder(x));
       }
       continue;
     }
@@ -770,7 +770,10 @@ function worktreeEntryLoss(entry, base, mainRoot, { git, regenerablePaths }) {
       return segs.length > 1 ? `${x}${segs[0]}/` : y;
     }))];
     kept.push(...left);
-    if (rest.length) folders.push(sharedFolder(rest.map((y) => parentOf(y.replace(/\/+$/, "")))));
+    for (const y of rest) {
+      const d = ruleFolder(y);
+      if (!folders.includes(d)) folders.push(d);
+    }
   }
   if (kept.length) lost.push(`ignored files that no commit holds (${listed(kept)})`);
   if (entry.detached && entry.head) {
@@ -778,8 +781,8 @@ function worktreeEntryLoss(entry, base, mainRoot, { git, regenerablePaths }) {
     if (n === null) return { failed: "`git rev-list` failed" };
     if (n > 0) lost.push(`${n} commit${n === 1 ? "" : "s"} reachable only from its detached HEAD \`${entry.head.slice(0, 12)}\``);
   }
-  const folder = folders.find((d) => d && !/^\.local(\/|$)/.test(d) && !/(^|\/)\.env/.test(d));
-  return { lost, folder: folder || "" };
+  const declarable = [...new Set(folders.filter((d) => d && !/^\.local(\/|$)/.test(d) && !/(^|\/)\.env/.test(d) && !/(^|\/)\.claude(\/|$)/.test(d)))];
+  return { lost, folders: declarable };
 }
 
 function vagueTargets(linked, p, base, home) {
@@ -809,6 +812,19 @@ function consentLabel(entry, mainRoot) {
   const names = consentNames(entry, mainRoot);
   const short = baseName(names[0]);
   return short.length >= CONSENT_NAME_MIN ? short : names[1] || names[0];
+}
+
+const DECLARE_SHOWN = 8;
+
+function declareHint(lossy, mainRoot) {
+  const folders = [...new Set(lossy.flatMap((l) => l.folders))];
+  if (!folders.length) return "";
+  const shown = folders.slice(0, DECLARE_SHOWN);
+  const more = folders.length > shown.length ? ` and ${folders.length - shown.length} more` : "";
+  const root = slashed(mainRoot).replace(/\/+$/, "");
+  const abs = shown.map((d) => `${root}/${d}`).join(", ");
+  const rel = shown.join(", ");
+  return ` If these folders are build output, declare them once and they stop counting in every worktree of this repository: ${shown.map((d) => `\`${d}\``).join(", ")}${more}. Only the user can declare them, so report this to the user with both ways: (a) open /config, find the cyberine-devguard options, and add \`${abs}\` to regenerable_paths (comma-separated, after any value already there); or (b) say in their prompt "add CYBERINE_DEVGUARD_REGENERABLE_PATHS to .claude/settings.local.json", and then you add \`"CYBERINE_DEVGUARD_REGENERABLE_PATHS": "${rel}"\` to the env of the gitignored \`${root}/.claude/settings.local.json\` (paths relative to \`${root}\`, joined to any value already there); that write is denied unless the user's prompt in the same turn names the key or the file.`;
 }
 
 function worktreeLoss(p, g, { git, home, cwd, regenerablePaths = [], named = null }) {
@@ -843,7 +859,7 @@ function worktreeLoss(p, g, { git, home, cwd, regenerablePaths = [], named = nul
   if (!lossy.length) return "";
   if (named && lossy.every((l) => named(consentNames(l.entry, mainRoot)))) return "";
   const first = lossy[0];
-  const declare = first.folder ? ` If a folder listed here is build output, the user can declare it once in the plugin option regenerable_paths (for example \`${slashed(mainRoot).replace(/\/+$/, "")}/${first.folder}\`), and it stops counting in every worktree of this repository.` : "";
+  const declare = declareHint(lossy, mainRoot);
   const consent = named ? ` Under bypassPermissions the removal also passes once the user names the worktree in their prompt, or picks an AskUserQuestion option whose label names it (\`${consentLabel(first.entry, mainRoot)}\`).` : "";
   if (vague) {
     const more = lossy.length > 1 ? ` (and ${lossy.length - 1} more worktree${lossy.length === 2 ? "" : "s"} under that path hold work)` : "";
