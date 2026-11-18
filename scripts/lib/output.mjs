@@ -84,7 +84,14 @@ function insideWorkingDir(v) {
   return v.targetTop.startsWith(top);
 }
 
+function hubGrantMiss(v) {
+  const rel = v.targetTop.slice(v.sessionTop.length).replace(/^[\\/]+/, "");
+  const by = v.hubBy === "hub-submodule" ? `hub_repos lists \`${v.sessionTop}\`` : `${HUB_GRANT_KEY} is already "true" in this repository's \`.claude/settings.local.json\``;
+  return `${by}, but that grant covers only submodules: \`${rel}\` is not a gitlink in the index of \`${v.sessionTop}\` (a plain clone, or listed in .gitmodules but never added with \`git submodule add\`). To allow it, register it as a submodule of \`${v.sessionTop}\` (\`git submodule add <url> ${rel}\`, or \`git add ${rel}\` for a clone already in place), or add \`${v.targetTop}\` to the ${pluginName} option extra_allowed_dirs (/config).`;
+}
+
 export function fixHint(v) {
+  if (v.why !== "other-worktree" && v.hubBy && insideWorkingDir(v) && v.sessionTop && v.targetTop.startsWith(v.sessionTop)) return hubGrantMiss(v);
   if (v.why !== "other-worktree" && insideWorkingDir(v)) {
     return `To allow it, the user can open /config, find the ${pluginName} options, and add \`${v.sessionTop}\` to hub_repos, or set \`"env": {"${HUB_GRANT_KEY}": "true"}\` in this repository's gitignored \`.claude/settings.local.json\`, to cover this repository's submodules, or \`${v.targetTop}\` to extra_allowed_dirs to cover just this one; both last across sessions. \`/add-dir\` does not help here: for a folder inside the working directory, Claude Code 2.1.312 only loads its skills and grants no write access.`;
   }
