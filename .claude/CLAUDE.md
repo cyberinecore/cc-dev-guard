@@ -21,7 +21,7 @@ Guidance for Claude Code working in this repository.
 - `scripts/lib/bashguard.mjs` (Bash parsing: `git worktree add` D25, obvious write shapes D28), `scripts/lib/mcpfs.mjs` (filesystem MCP schemas, D29), `scripts/lib/worktrees.mjs` (the report-only `worktrees` command, D27).
 - `plugins/cyberine-worktree/`: the second, self-contained plugin (WorktreeCreate hook, D26). It may import only node builtins; it has its own version.
 - `hooks/hooks.json`: exec-form `node ${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs hook`, matchers `Write|Edit|NotebookEdit`, `Bash` and the filesystem MCP write tools, plus UserPromptSubmit `prompt-submit` (D54), PostToolUse on `AskUserQuestion` `picker-answer` (D60), SessionStart `session-start` (surfaces a missing or old node, prunes records) and DirectoryAdded `directory-added` (records `/add-dir` per session).
-- `docs/`: `DECISIONS.md`, `LIVE-MATRIX.md`, `FAILURE-MODES.md`, `SECURITY-REVIEW.md`, `PARITY.md`. README claims trace to these or to tests.
+- `docs/`: `DECISIONS.md`, `LIVE-MATRIX.md`, `FAILURE-MODES.md`, `SECURITY-REVIEW.md`, `PARITY.md`, `CLEANUP.md`. README claims trace to these or to tests.
 
 ## Constraints
 
