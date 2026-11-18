@@ -31,7 +31,18 @@ export function commandAllowed(command, entries) {
   if (!Array.isArray(entries) || !entries.length || typeof command !== "string") return false;
   const segments = splitSegments(command).map((p) => p.text.trim()).filter(Boolean);
   if (!segments.length) return false;
-  return segments.every((s) => entries.some((e) => (e.prefix === null ? s === e.text : s.startsWith(e.prefix) && !UNSAFE_TAIL.test(s.slice(e.prefix.length).replace(FD_COPY, "")))));
+  return segments.every((s) => entries.some((e) => (e.prefix === null ? s === e.text : s.startsWith(e.prefix) && safeTail(e.prefix, s.slice(e.prefix.length)))));
+}
+
+const PATH_BINS = new Set(["rm", "rmdir", "unlink", "mv", "cp", "find", "rsync", "trash", "shred", "chmod", "chown", "ln", "truncate"]);
+const reDotDot = /(^|[\s/="'])\.\.(?=$|[\s/"'])/;
+
+function safeTail(prefix, tail) {
+  if (UNSAFE_TAIL.test(tail.replace(FD_COPY, ""))) return false;
+  if (reDotDot.test(tail)) return false;
+  const bin = prefix.trim().split(/\s+/).find((w) => !/^(sudo|env|command|nohup|time|exec)$/.test(w) && !/^\w+=/.test(w)) || "";
+  if (PATH_BINS.has(bin.replace(/^.*\//, "")) && /\s/.test(tail)) return false;
+  return true;
 }
 
 export function normalizeAppName(name) {

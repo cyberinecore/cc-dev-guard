@@ -199,6 +199,23 @@ function scan(cmd, ctx, depth) {
   }
 }
 
+const DOCKER_STOPS = new Set(["stop", "kill", "rm", "restart", "pause"]);
+const reDockerListSub = /(?:\$\(|`)\s*docker\s+(?:container\s+)?(?:ps|ls)\b([^)`]*)/g;
+
+function dockerMass(a, sub, viaXargs) {
+  let i = 0;
+  while (i < a.length && a[i].startsWith("-")) i++;
+  if (a[i] === "container") i++;
+  const verb = a[i];
+  if (!DOCKER_STOPS.has(verb)) return null;
+  const what = `\`docker ${verb}\``;
+  if (viaXargs) return ask(`docker-xargs-${verb}`, `${what} through \`xargs\` acts on whatever container ids arrive on stdin, which can include another project's containers. Name the containers, or use \`docker compose -p <project> ${verb === "kill" || verb === "pause" ? verb : "stop"}\` for this project's own stack.`);
+  for (const m of sub.matchAll(reDockerListSub)) {
+    if (!/(^|\s)(--filter|-f)(\s|=|$)/.test(m[1])) return ask(`docker-all-${verb}`, `${what} over \`docker ps\` without \`--filter\` acts on every container on the Docker daemon, other projects' included. Add \`--filter label=<your label>\` or \`--filter name=<prefix>\`, name the containers, or use \`docker compose -p <project> ${verb === "kill" || verb === "pause" ? verb : "stop"}\`.`);
+  }
+  return null;
+}
+
 function judge({ bin, args, viaXargs }, sub, vars, ctx, depth) {
   const push = (f) => f && ctx.findings.push(f);
   const a = words(args);
@@ -212,6 +229,7 @@ function judge({ bin, args, viaXargs }, sub, vars, ctx, depth) {
   if (viaXargs && (bin === "kill" || bin === "pkill" || bin === "killall")) {
     return push(ask(`xargs-${bin}`, `\`${bin}\` through \`xargs\` stops whatever process ids arrive on stdin (often \`lsof -ti\` or \`pgrep\` output), which can include another project's process or one the user started.`));
   }
+  if (bin === "docker") return push(dockerMass(a, sub, viaXargs));
   switch (bin) {
     case "pkill":
     case "killall":

@@ -1340,7 +1340,11 @@ function rmTargetReason(raw, opts, value = raw.replace(/^["']+|["']+$/g, "")) {
     if (!why) return "";
     return `recursive rm of \`${raw}\` is denied: ${why}.`;
   }
-  if (relative) return "";
+  if (relative) {
+    const kept = keptDataSegment(abs || t);
+    if (!kept || (declaredOutput && abs && declaredOutput(abs))) return "";
+    return `recursive rm of \`${raw}\` is denied: it is at or inside \`${kept}\`, which holds data no commit keeps (notes, credentials, local settings), the same as its absolute path. If it is build output under that folder, the user can declare it in regenerable_paths.`;
+  }
   if (home && (expanded === home || expanded === home + "/")) return "recursive rm of the home directory is denied.";
   if (cacheDirCandidate(quotedRaw, expanded) && !reLexicalDots.test(target.lexical)) {
     if (isCacheDir && isCacheDir(abs)) return "";
@@ -1348,6 +1352,15 @@ function rmTargetReason(raw, opts, value = raw.replace(/^["']+|["']+$/g, "")) {
     if (declaredOutput && declaredOutput(abs)) return "";
   }
   return `recursive rm of absolute path \`${raw}\` is denied (only tmp dirs, .claude/worktrees, regenerable build/cache dirs, directories carrying a CACHEDIR.TAG, paths below one of those inside the repository or home, and ignored, untracked paths the user declared in the regenerable_paths option are allowed).`;
+}
+
+function keptDataSegment(p) {
+  const segs = p.replace(/\/+$/, "").split("/");
+  for (let i = 0; i < segs.length; i++) {
+    if (segs[i] === ".local" || /^\.env(\.|$)/.test(segs[i])) return segs.slice(0, i + 1).join("/") || segs[i];
+    if (segs[i] === ".claude" && (i === segs.length - 1 || segs[i + 1] === "settings.local.json")) return segs.slice(0, i + 2).join("/");
+  }
+  return "";
 }
 
 function joinPosix(dir, rel) {

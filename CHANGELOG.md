@@ -2,6 +2,13 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.21.2] - 2026-11-19
+
+- Security: a recursive `rm` or `find -delete` written as a relative path into `.local/`, `.env*`, `.claude` or `.claude/settings.local.json` is denied like its absolute path; a path declared in `regenerable_paths` still passes (D76).
+- Security: an `allow_commands` entry ending in `*` no longer matches a tail with a `..` segment, nor, for `rm`, `mv`, `cp`, `find` and other path commands, a tail with a second argument (D76).
+- Security: `docker stop|kill|rm|restart|pause` over `$(docker ps ...)` without `--filter`, or through `xargs`, is asked about like a kill by name, and denied under `bypassPermissions` (D76).
+- Docs: `docs/CLEANUP.md` lists what a session can remove after a batch run and in which command shape.
+
 ## [0.21.1] - 2026-11-19
 
 - Change: when `git worktree remove` stops on ignored files, the reason names every folder a `.gitignore` rule covers and gives ready values for `regenerable_paths` in `/config` and for `CYBERINE_DEVGUARD_REGENERABLE_PATHS` in the gitignored `.claude/settings.local.json`, and says only the user can declare them (D75).
