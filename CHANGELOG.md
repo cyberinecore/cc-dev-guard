@@ -2,6 +2,11 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.21.1] - 2026-11-19
+
+- Change: when `git worktree remove` stops on ignored files, the reason names every folder a `.gitignore` rule covers and gives ready values for `regenerable_paths` in `/config` and for `CYBERINE_DEVGUARD_REGENERABLE_PATHS` in the gitignored `.claude/settings.local.json`, and says only the user can declare them (D75).
+- Change: when `hub_repos` or `CYBERINE_DEVGUARD_HUB_SUBMODULES` is already on but the nested repository is not a submodule, the deny reason says so and how to register it, instead of recommending the grant that is already set.
+
 ## [0.21.0] - 2026-11-18
 
 - Security: `echo` or `printf` text piped into anything but a known data reader is now checked like a command. Before, a destructive SQL statement printed into `psql`, or a recursive delete printed into `sh`, passed (D73).
