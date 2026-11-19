@@ -59,7 +59,7 @@ export function isClaudeSettingsFile(p, configDir) {
   return basename(dirname(p)) === ".claude" || (typeof configDir === "string" && dirname(p) === configDir);
 }
 
-export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit", "regenerable_paths", "output_paths", "allow_commands", "relaunch_exempt_apps"];
+export const OPTION_KEYS = ["mode", "profile", "extra_allowed_dirs", "hub_repos", "allow_ignored", "log_decisions", "log_level", "read_transcript", "worktree_guard", "isolate_worktrees", "bash_guard", "danger_guard", "session_hint", "protected_branches", "deny_aws_s3_deletes", "allow_danger_env", "bypass_strict", "allow_ignored_nested_repos", "live_guard", "live_guard_desktop", "relaunch_limit", "regenerable_paths", "output_paths", "allow_commands", "relaunch_exempt_apps"];
 
 export function repoSetOptionKeys(sessionRoot) {
   if (typeof sessionRoot !== "string" || !isAbsolute(sessionRoot)) return [];
@@ -166,13 +166,15 @@ function option(env, optionName) {
   return v === undefined ? undefined : String(v);
 }
 
-function parseLogLevel(raw, warnings) {
-  if (raw === undefined || raw === "") return "stops";
-  const v = raw.trim().toLowerCase();
-  if (v === "off" || v === "stops" || v === "all") return v;
-  if (v === "true") return "all";
-  if (v === "false") return "off";
-  warnings.push(`option log_decisions: "${raw}" is not off, stops or all; using stops`);
+function resolveLogLevel(level, legacy, warnings) {
+  if (level !== undefined && level !== "") {
+    const v = level.trim().toLowerCase();
+    if (v === "off" || v === "stops" || v === "all") return v;
+    warnings.push(`option log_level: "${level}" is not off, stops or all; ignored`);
+  }
+  if (legacy === "true") return "all";
+  if (legacy === "false") return "off";
+  if (legacy !== undefined && legacy !== "") warnings.push(`option log_decisions: "${legacy}" is not true or false; ignored`);
   return "stops";
 }
 
@@ -361,7 +363,7 @@ export function loadConfig({ env = {}, sessionRoot, git = null } = {}) {
   c.regenerablePaths = [...parseDirList(option(env, "regenerable_paths"), "regenerable_paths", w), ...parseDirList(option(env, "output_paths"), "output_paths", w)];
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
   c.allowIgnoredNestedRepos = parseBool(option(env, "allow_ignored_nested_repos"), "allow_ignored_nested_repos", true, w);
-  c.logLevel = parseLogLevel(option(env, "log_decisions"), w);
+  c.logLevel = resolveLogLevel(option(env, "log_level"), option(env, "log_decisions"), w);
   c.logDecisions = c.logLevel === "all";
   c.logStops = c.logLevel !== "off";
   c.readTranscript = parseBool(option(env, "read_transcript"), "read_transcript", false, w);

@@ -17,4 +17,4 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/devguard.mjs" denials
 
 2. Report the output as it is: per repository, each kind of stop with its count and verdict, then the `fix:` lines (a declaration taken from the reason shown at the time) or the `route:` line (the general way through).
 3. A `fix:` that names `CYBERINE_DEVGUARD_REGENERABLE_PATHS` is a value for the repository's gitignored `.claude/settings.local.json`. Write it only if the user's prompt in this turn names that key or file; otherwise give the user the line to paste. Options in `/config`, including `allow_commands` and `regenerable_paths`, are the user's to set: never edit them yourself.
-4. If the output says logging is off, tell the user that `log_decisions` in `/config` takes `off`, `stops` (the default: danger_guard, live_guard and internal-error stops) or `all` (also every write into another repository).
+4. If the output says logging is off, tell the user that `log_level` in `/config` takes `off`, `stops` (the default: danger_guard, live_guard and internal-error stops) or `all` (also every write into another repository), and that the earlier `log_decisions` switch set to `false` also turns it off.

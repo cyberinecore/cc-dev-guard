@@ -24,7 +24,7 @@ What a session can remove after a run (worktrees, dev stacks, scratch, processes
 
 ## Seeing what was stopped
 
-`/cyberine-devguard:denials` lists the stops recorded in the last 30 days by repository and kind, with the declaration that would let each through. It reads `decisions.jsonl`, which `log_decisions` = `stops` (the default) fills.
+`/cyberine-devguard:denials` lists the stops recorded in the last 30 days by repository and kind, with the declaration that would let each through. It reads `decisions.jsonl`, which `log_level` = `stops` (the default) fills.
 
 ## Recurring command
 

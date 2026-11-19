@@ -378,7 +378,7 @@ function describeSession(opts, env) {
     ...(allowed.sources || []).map((s) => `  ${s.dir} (${s.source})`),
     ...(allowed.transcriptReason ? [`  transcript unreadable: ${allowed.transcriptReason}`] : []),
     `mode: ${config.mode}`,
-    `log decisions: ${config.logLevel}${config.logLevel === "off" ? " (/cyberine-devguard:denials has nothing new to read)" : ""}`,
+    `log level: ${config.logLevel}${config.logLevel === "off" ? " (/cyberine-devguard:denials has nothing new to read)" : ""}`,
     `allow ignored: ${config.allowIgnored}`,
     `read transcript: ${config.readTranscript}`,
     `bash guard: ${config.bashGuard}`,

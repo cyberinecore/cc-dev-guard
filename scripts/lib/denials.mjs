@@ -91,8 +91,8 @@ export function kindOf(guard, reason) {
 export function denialsReport(env, { days = LOG_RETENTION_DAYS, now = Date.now(), level = "stops" } = {}) {
   const path = logPath(env);
   const head = [];
-  if (level === "off") head.push("Logging is off (log_decisions = off), so nothing new is recorded. Turn it on in /config: stops (the default) or all.");
-  else if (level === "stops") head.push("Logging: stops (default). Writes into another repository are recorded only with log_decisions = all.");
+  if (level === "off") head.push("Logging is off (log_level off, or the earlier log_decisions switch set to false), so nothing new is recorded. Set log_level in /config to stops (the default) or all.");
+  else if (level === "stops") head.push("Logging: stops (default). Writes into another repository are recorded only with log_level all.");
   if (!path) return [...head, "No plugin data directory is set, so there is no log to read."].join("\n");
   const cutoff = now - days * 86400000;
   const groups = new Map();
