@@ -2,6 +2,12 @@
 
 All notable changes to Cyberine DevGuard. Versions follow `version` in `.claude-plugin/plugin.json`; each release is tagged `cyberine-devguard--v<version>`.
 
+## [0.22.0] - 2026-11-19
+
+- Feature: `/cyberine-devguard:denials` summarises recorded stops by repository and kind, with the declaration that would let each through (`regenerable_paths` folders, the hub grant, naming the target in the prompt) or the general route (D77).
+- Change: `log_decisions` takes `off`, `stops` or `all`, and the default is now `stops`: danger_guard, live_guard and internal-error stops are logged locally out of the box; writes into another repository only with `all`. `true` and `false` mean `all` and `off`. Each line now also carries the repository and the declaration the reason names. The log is pruned to 30 days and 2 MiB at session start (D77).
+- Change: `status` shows the log level.
+
 ## [0.21.2] - 2026-11-19
 
 - Security: a recursive `rm` or `find -delete` written as a relative path into `.local/`, `.env*`, `.claude` or `.claude/settings.local.json` is denied like its absolute path; a path declared in `regenerable_paths` still passes (D76).

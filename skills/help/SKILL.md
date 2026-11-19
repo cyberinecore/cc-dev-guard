@@ -7,7 +7,7 @@ user-invocable: true
 
 # Cyberine DevGuard help
 
-Answer from this page; for a concrete path or "why was I asked", use `/cyberine-devguard:status`.
+Answer from this page; for a concrete path or "why was I asked", use `/cyberine-devguard:status`; for what was stopped over time and how to declare it, `/cyberine-devguard:denials`.
 
 What it does: a PreToolUse hook on Write, Edit and NotebookEdit. When the target file is in a different git repository from the one the session started in, and not inside a directory the session was allowed, Cyberine DevGuard asks before the write runs. Writes inside the session repository, its worktrees, allowed directories (`--add-dir`, `/add-dir`, `permissions.additionalDirectories`; read from settings, the `/add-dir` hook event and the claude command line, never from the conversation), paths the other repository gitignores, non-git directories, and Claude Code's own memory and plan folders pass without a prompt. A session started outside any git repository is not guarded.
 

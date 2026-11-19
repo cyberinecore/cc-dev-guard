@@ -18,7 +18,7 @@ Inside its Claude Code plugin data directory (`~/.claude/plugins/data/<id>/`):
 - empty marker files for `deny-once` answers, deleted after 10 minutes;
 - under `bypassPermissions` with `profile` `assist`: per session, the id of your latest prompt and one-way hashes of its words (no text), replaced on each prompt and deleted after 7 days;
 - with `live_guard` on (the default): per session, the names of tmux sessions that session created and the times it launched each app within the last 60 minutes, deleted after 7 days;
-- only if you turn on `log_decisions`: one line per stopped write with the time, session id, tool, file path and verdict, and one line per `danger_guard`, `live_guard` or internal-error stop with the guard, verdict and the reason shown to Claude (values that look like tokens, passwords or keys are masked, `$HOME` is shortened to `~`); the command itself is not stored. Lines are kept until you delete it or uninstall the plugin.
+- by default (`log_decisions` = `stops`): one line per `danger_guard`, `live_guard` or internal-error stop with the time, session id, tool, guard, verdict, the reason shown to Claude (values that look like tokens, passwords or keys are masked, `$HOME` is shortened to `~`), the repository path and the declaration the reason names; the command itself is not stored. With `all`, also one line per stopped write into another repository with its file path. With `off`, nothing. Lines older than 30 days are dropped at session start and the file is kept under 2 MiB; deleting the file or uninstalling the plugin removes it. `/cyberine-devguard:denials` reads it locally.
 
 Claude Code deletes the data directory when you uninstall the plugin (unless you pass `--keep-data`).
 

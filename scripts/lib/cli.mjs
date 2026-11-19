@@ -20,6 +20,7 @@ import { countLaunches, liveStateDir, loadLiveState, RELAUNCH_WINDOW_MS, saveLiv
 import { mcpWriteTargets } from "./mcpfs.mjs";
 import { GUARDED_FILE_WHYS, render, renderDanger, renderDangerAsk, renderError, renderLive, renderWorktree } from "./output.mjs";
 import { findRepos, formatScan, makeGh, scanRepo } from "./worktrees.mjs";
+import { denialsReport, fixOf, pruneDecisionLog } from "./denials.mjs";
 import { pruneSessionRecords, recordDirectoryAdded } from "./sources.mjs";
 import { promptHasAny, promptNames, prunePromptRecords, recordPickerAnswer, recordPrompt } from "./prompts.mjs";
 
@@ -32,6 +33,8 @@ const usage = `usage: ${pluginName} <command>
   session-start             warn when node is too old and prune old session records (used by hooks/hooks.json)
   explain <path> [options]  show the verdict for a write to <path>
   status [options]          show the session repository, allowed directories and configuration
+  denials [--days N]        summarise the stops recorded in decisions.jsonl by repository and kind, with the
+                            declaration that would let each through (default: the last 30 days)
   worktrees [dir...] [--no-gh]
                             report stray, prunable and merged git worktrees of each repository at or
                             under <dir> (default: the current directory); changes nothing
@@ -60,7 +63,7 @@ function logDecision(env, input, verdict, out, now) {
     const home = env.HOME || env.USERPROFILE || "";
     const reason = String(out?.hookSpecificOutput?.permissionDecisionReason || "");
     const target = typeof verdict.target === "string" && home ? verdict.target.split(home).join("~") : verdict.target;
-    const line = { time: new Date(now).toISOString(), session: input.session_id ?? "", tool: input.tool_name ?? "", guard: "scope", verdict: verdictWord(out), reason: redactCommand(reason, home).slice(0, 300), version: VERSION, target, why: verdict.why };
+    const line = { time: new Date(now).toISOString(), session: input.session_id ?? "", tool: input.tool_name ?? "", guard: "scope", verdict: verdictWord(out), reason: redactCommand(reason, home).slice(0, 300), version: VERSION, target, why: verdict.why, repo: repoLabel(env, input, home), fix: fixOf(reason).map((f) => (home ? f.split(home).join("~") : f)) };
     appendFileSync(join(env.CLAUDE_PLUGIN_DATA, "decisions.jsonl"), JSON.stringify(line) + "\n", { mode: 0o600 });
   } catch {}
 }
@@ -79,13 +82,24 @@ export function redactCommand(command, home = "") {
   return s.length > 400 ? s.slice(0, 400) + "..." : s;
 }
 
+function repoLabel(env, input, home) {
+  try {
+    const root = sessionRootOf(env.CLAUDE_PROJECT_DIR, input?.cwd);
+    if (!root) return "";
+    const top = makeGit().toplevel(root) || root;
+    return home ? top.split(home).join("~") : top;
+  } catch {
+    return "";
+  }
+}
+
 function logGuard(env, config, input, guard, out, now) {
-  if (!config?.logDecisions || !out || !isAbsolute(env.CLAUDE_PLUGIN_DATA || "")) return;
+  if (!config?.logStops || !out || !isAbsolute(env.CLAUDE_PLUGIN_DATA || "")) return;
   try {
     mkdirSync(env.CLAUDE_PLUGIN_DATA, { recursive: true });
     const home = env.HOME || env.USERPROFILE || "";
     const reason = String(out.hookSpecificOutput?.permissionDecisionReason || out.systemMessage || "");
-    const line = { time: new Date(now).toISOString(), session: input?.session_id ?? "", tool: input?.tool_name ?? "", guard, verdict: verdictWord(out), reason: redactCommand(reason, home).slice(0, 300), version: VERSION };
+    const line = { time: new Date(now).toISOString(), session: input?.session_id ?? "", tool: input?.tool_name ?? "", guard, verdict: verdictWord(out), reason: redactCommand(reason, home).slice(0, 300), version: VERSION, repo: repoLabel(env, input, home), fix: fixOf(reason).map((f) => (home ? f.split(home).join("~") : f)) };
     const path = input?.tool_input?.file_path || input?.tool_input?.notebook_path || input?.tool_input?.path;
     if (typeof path === "string") line.target = home ? path.split(home).join("~") : path;
     appendFileSync(join(env.CLAUDE_PLUGIN_DATA, "decisions.jsonl"), JSON.stringify(line) + "\n", { mode: 0o600 });
@@ -314,7 +328,7 @@ function parseArgs(args) {
     const a = args[i];
     if (a === "--no-gh") {
       opts.noGh = true;
-    } else if (a === "--root" || a === "--cwd" || a === "--transcript") {
+    } else if (a === "--root" || a === "--cwd" || a === "--transcript" || a === "--days") {
       if (i + 1 >= args.length) throw new Error(`${a} needs a value`);
       opts[a.slice(2)] = args[++i];
     } else if (a.startsWith("--")) {
@@ -364,6 +378,7 @@ function describeSession(opts, env) {
     ...(allowed.sources || []).map((s) => `  ${s.dir} (${s.source})`),
     ...(allowed.transcriptReason ? [`  transcript unreadable: ${allowed.transcriptReason}`] : []),
     `mode: ${config.mode}`,
+    `log decisions: ${config.logLevel}${config.logLevel === "off" ? " (/cyberine-devguard:denials has nothing new to read)" : ""}`,
     `allow ignored: ${config.allowIgnored}`,
     `read transcript: ${config.readTranscript}`,
     `bash guard: ${config.bashGuard}`,
@@ -450,6 +465,9 @@ export async function main(argv, { env = namedEnv(process.env), stdout = process
         pruneSessionRecords(env);
         prunePromptRecords(env);
       } catch {}
+      try {
+        pruneDecisionLog(env);
+      } catch {}
       let config = null;
       try {
         config = loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, process.cwd()) });
@@ -460,6 +478,16 @@ export async function main(argv, { env = namedEnv(process.env), stdout = process
     }
     if (cmd === "explain") {
       stdout.write(explain(parseArgs(rest), env) + "\n");
+      return 0;
+    }
+    if (cmd === "denials") {
+      const opts = parseArgs(rest);
+      const days = Number(opts.days) > 0 ? Number(opts.days) : undefined;
+      let level = "stops";
+      try {
+        level = loadConfig({ env, sessionRoot: sessionRootOf(env.CLAUDE_PROJECT_DIR, process.cwd()) }).logLevel;
+      } catch {}
+      stdout.write(denialsReport(env, { days, level }) + "\n");
       return 0;
     }
     if (cmd === "status") {

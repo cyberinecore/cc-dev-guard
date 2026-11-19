@@ -24,6 +24,8 @@ export function defaultConfig() {
     allowIgnored: true,
     allowIgnoredNestedRepos: true,
     logDecisions: false,
+    logStops: true,
+    logLevel: "stops",
     readTranscript: false,
     worktreeGuard: true,
     isolateWorktrees: false,
@@ -162,6 +164,16 @@ export function repoSetsEnv(sessionRoot, name) {
 function option(env, optionName) {
   const v = env[OPTION_PREFIX + optionName.toUpperCase()];
   return v === undefined ? undefined : String(v);
+}
+
+function parseLogLevel(raw, warnings) {
+  if (raw === undefined || raw === "") return "stops";
+  const v = raw.trim().toLowerCase();
+  if (v === "off" || v === "stops" || v === "all") return v;
+  if (v === "true") return "all";
+  if (v === "false") return "off";
+  warnings.push(`option log_decisions: "${raw}" is not off, stops or all; using stops`);
+  return "stops";
 }
 
 function parseBool(raw, optionName, fallback, warnings) {
@@ -349,7 +361,9 @@ export function loadConfig({ env = {}, sessionRoot, git = null } = {}) {
   c.regenerablePaths = [...parseDirList(option(env, "regenerable_paths"), "regenerable_paths", w), ...parseDirList(option(env, "output_paths"), "output_paths", w)];
   c.allowIgnored = parseBool(option(env, "allow_ignored"), "allow_ignored", true, w);
   c.allowIgnoredNestedRepos = parseBool(option(env, "allow_ignored_nested_repos"), "allow_ignored_nested_repos", true, w);
-  c.logDecisions = parseBool(option(env, "log_decisions"), "log_decisions", false, w);
+  c.logLevel = parseLogLevel(option(env, "log_decisions"), w);
+  c.logDecisions = c.logLevel === "all";
+  c.logStops = c.logLevel !== "off";
   c.readTranscript = parseBool(option(env, "read_transcript"), "read_transcript", false, w);
   c.worktreeGuard = parseBool(option(env, "worktree_guard"), "worktree_guard", true, w);
   c.bashGuard = parseBool(option(env, "bash_guard"), "bash_guard", true, w);

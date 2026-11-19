@@ -1,6 +1,6 @@
 # Cleanup after a batch run
 
-What a session can remove after a run (worktrees, dev stacks, scratch, processes) without a stop, measured with the 0.21.2 hook under bypassPermissions on 2026-11-19. Cyberine DevGuard reads no resource manifest, registry, compose label or cleanup schema, and nothing records which session started which PID, port or worktree: a cleanup passes when each command has a shape the guard can judge.
+What a session can remove after a run (worktrees, dev stacks, scratch, processes) without a stop, measured with the 0.22.0 hook under bypassPermissions on 2026-11-19. Cyberine DevGuard reads no resource manifest, registry, compose label or cleanup schema, and nothing records which session started which PID, port or worktree: a cleanup passes when each command has a shape the guard can judge.
 
 ## Passes as-is
 
@@ -21,6 +21,10 @@ What a session can remove after a run (worktrees, dev stacks, scratch, processes
 
 - `CYBERINE_DEVGUARD_REGENERABLE_PATHS` in the env block of the repo's gitignored, untracked `.claude/settings.local.json`. Paths are relative to the repo root and comma-separated; `*` matches inside one folder name, and `**` is rejected. It covers only ignored, untracked paths inside the repo with no nested .git, and applies to absolute `rm -rf` and to `git worktree remove`. A session may write the key only when the owner's prompt in the same turn names the key or the file.
 - `allow_commands` exact-command entries, set by the owner only, in /config under the cyberine-devguard options. It applies in every repo. A trailing-* entry never matches a tail with a `..` segment, and for path commands such as `rm` a tail with a second argument; prefer exact entries.
+
+## Seeing what was stopped
+
+`/cyberine-devguard:denials` lists the stops recorded in the last 30 days by repository and kind, with the declaration that would let each through. It reads `decisions.jsonl`, which `log_decisions` = `stops` (the default) fills.
 
 ## Recurring command
 

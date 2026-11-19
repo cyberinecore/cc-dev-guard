@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin.json",
   "name": "cyberine-devguard",
   "displayName": "Cyberine DevGuard",
-  "version": "0.21.2",
+  "version": "0.22.0",
   "description": "Keeps a Claude Code session inside its own repository: a zero-dependency PreToolUse hook that asks before Write, Edit, NotebookEdit, an obvious Bash write or a filesystem MCP write touches another git repository that the session was not given, before a Bash git worktree add lands outside .claude/worktrees/, and denies data-destroying Bash commands (recursive rm outside temp and build folders, git reset --hard, force-push to a protected branch, terraform destroy, DROP TABLE and similar) in every permission mode, and asks before or denies commands that disrupt the user's running machine (pkill by name, tmux sessions it did not create, system settings, launch agents, repeated app relaunches), plus status, explain and worktree report skills.",
   "author": {
     "name": "Nia D Pham",
@@ -69,10 +69,10 @@
       "default": true
     },
     "log_decisions": {
-      "type": "boolean",
+      "type": "string",
       "title": "Log decisions",
-      "description": "Append each cross-repository verdict, and each danger_guard, live_guard or internal-error stop (guard, verdict, reason; the command itself is not stored), to decisions.jsonl in the plugin data directory. Nothing is sent anywhere.",
-      "default": false
+      "description": "off, stops (default) or all. stops: append each danger_guard, live_guard or internal-error stop (guard, verdict, the reason with secret-looking values masked, the repository; the command itself is not stored) to decisions.jsonl in the plugin data directory. all: also each write into another repository. Lines older than 30 days are dropped and the file is kept under 2 MiB. Nothing is sent anywhere. /cyberine-devguard:denials summarises the file. true and false from earlier versions mean all and off.",
+      "default": "stops"
     },
     "read_transcript": {
       "type": "boolean",
@@ -133,7 +133,17 @@
       "title": "Protected branches",
       "description": "Branch names a force-push to is denied while danger_guard is on.",
       "multiple": true,
-      "default": ["main", "master", "production", "prod", "development", "develop", "dev", "release", "staging"]
+      "default": [
+        "main",
+        "master",
+        "production",
+        "prod",
+        "development",
+        "develop",
+        "dev",
+        "release",
+        "staging"
+      ]
     },
     "deny_aws_s3_deletes": {
       "type": "boolean",
