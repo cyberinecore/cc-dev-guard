@@ -281,7 +281,7 @@ export function renderLive(f, { input, now = Date.now(), markerDir, warnings = [
   if (input?.permission_mode === "bypassPermissions") {
     if (f.hard || bypassStrict) return decision("deny", withWarnings(`${pluginName}: ${withoutApprove(f.reason)} This session runs with bypassPermissions, where no prompt reaches the user, so live_guard denies it. Report the command to the user instead of running it another way.`, warnings));
     if (!firstTry(`live\u0000${f.key}`, { input, now, markerDir })) return null;
-    return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${withoutApprove(f.reason)} Retry only if the user explicitly asked for this command this turn; otherwise report it to the user instead. (${pluginName} live_guard deny-once under bypassPermissions: a retry within ${retryMinutes} minutes passes.)`, warnings));
+    return decision("deny", withWarnings(`Default: NO. ${pluginName}: ${withoutApprove(f.reason)} Retry once only if the user asked for this command this turn or a standing instruction from the user names this action; otherwise report it to the user instead. (${pluginName} live_guard deny-once under bypassPermissions: a retry within ${retryMinutes} minutes passes.)`, warnings));
   }
   return decision("ask", withWarnings(`${pluginName}: ${f.reason} It changes the user's running machine outside this session's own work. Approve only if you asked for it.`, warnings));
 }

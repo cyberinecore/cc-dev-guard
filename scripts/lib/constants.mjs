@@ -1,5 +1,5 @@
 export const NAME = "cyberine-devguard";
-export const VERSION = "0.22.1";
+export const VERSION = "0.22.2";
 export const MODES = ["off", "warn", "deny-once", "ask"];
 export const DEFAULT_MODE = "ask";
 export const PROFILES = ["assist", "strict"];
